@@ -32,16 +32,13 @@ cd "$LOCAL"
 git config user.email "${GIT_USER_EMAIL:-user@local}"
 git config user.name  "${GIT_USER_NAME:-user}"
 
-echo "== 2) 写 src/application/config.json（useWorktree=false，直接加载 release 工作树）=="
+echo "== 2) 写 src/application/config.json（只放本机差异，其余契约取自 registry.json）=="
 cat > "$HERE/src/application/config.json" <<JSON
 {
   "repoPath": "$LOCAL",
   "branch": "$BRANCH",
   "remote": "origin",
-  "appEntry": "src/application/renderer/index.html",
-  "useWorktree": false,
-  "autoRestart": false,
-  "autoPull": true
+  "useWorktree": false
 }
 JSON
 

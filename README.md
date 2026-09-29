@@ -51,13 +51,15 @@ electron-git-pull-updater/                  ← 整个仓库就是「方案的�
 │   └── build.md                            # 如何构建 / 运行这个 Electron 应用
 ├── src/
 │   ├── application/                        # Electron 壳（应用逻辑）
-│   │   ├── main.js                         # 启动器（主进程）：解析 release 树 → 检测/pull → 加载渲染层
+│   │   ├── registry.js                     # 契约注册表解析器：合并静态默认值 + 本机覆盖
+│   │   ├── registry.json                   # ★ 契约唯一事实源（路径 / bridge API 名单，进 git）
+│   │   ├── main.js                         # 启动器（主进程）：校验契约 → 检测/pull → 加载渲染层
 │   │   ├── updater.js                      # git 驱动的更新引擎（不依赖 electron，可单测）
-│   │   ├── preload.js                      # contextBridge 桥接层
+│   │   ├── preload.js                      # contextBridge 桥接层（按注册表生成 window.api）
 │   │   ├── renderer/                       # 渲染层 = 热更目标（改这里 → 无重启）
 │   │   │   ├── index.html
 │   │   │   └── renderer.js
-│   │   └── config.json                     # 安装脚本生成（含本机绝对路径），已被 .gitignore
+│   │   └── config.json                     # 本机差异（repoPath 等绝对路径），已被 .gitignore
 │   └── tools/
 │       └── real-remote-check.js            # 验证「真实远程读取路径」(clone 公开仓库做 fetch/compare/diff)
 ├── scripts/
@@ -81,6 +83,8 @@ ssh -T git@github.com             # 看到 "Hi <you>! You've successfully authen
 ```
 
 ### 1. 安装并运行
+> **前提**：Node **≥ 22.12.0**（electron@44 硬性要求），仓库带 `.nvmrc`，`nvm use` 即可切换。
+
 ```bash
 bash scripts/setup.sh             # 只 clone release 单分支到 local/app-checkout，并写 config
 npm install && npm start          # 装 electron 并启动
@@ -138,6 +142,32 @@ bash scripts/setup.sh   git@github.com:<你>/<repo>.git
 bash scripts/publish.sh git@github.com:<你>/<repo>.git
 ```
 `config.json` 由 `setup.sh` 自动写好指向本地 clone，其余代码无需改动。
+
+## 文件契约（改动前必读）
+
+本方案没有编译期、没有打包器——**路径和 API 名就是全部契约，且只在运行时兑现**。
+所有契约集中在 `src/application/registry.json`（唯一事实源，进 git），由 `registry.js` 解析后供各处取用：
+
+| 契约 | 存放位置 | 谁依赖 |
+|---|---|---|
+| `appEntry` / `rendererDir` / `rendererEntry` | registry.json | main.js、publish.sh |
+| `preload` | registry.json | main.js 的 BrowserWindow |
+| `rendererPrefix`（热更判定前缀） | 由 rendererDir 推导 | main.js |
+| `window.api` 成员名单 | registry.json 的 `bridgeApi` | preload.js + renderer.js |
+| `remote` / `branch` / `autoPull` 默认值 | registry.json | main.js |
+| `repoPath`（本机绝对路径） | config.json（gitignore） | main.js |
+
+**注意两个不同的根**：`preload` 相对壳目录（`src/application/`）解析；`appEntry`/`rendererDir` 相对代码树根（appRoot）解析。布局一致但语义不同。
+
+已经是机器校验的三条闸门，写错了会**在窗口打开前报错**，而不是白屏：
+
+1. `registry.js`：`appEntry` 必须落在 `rendererDir` 内，否则「免重启热更」的前提不成立 → throw。
+2. `main.js` 的 `verifyContract()`：appEntry / rendererDir / preload 三个路径必须真实存在 → 弹错误框退出。
+3. `preload.js`：注册表的 `bridgeApi` 与自身实现必须完全一致（少了没实现、多了没登记都 throw）——
+   这条最重要：**pull 后渲染层是新的、preload 仍是旧的**，新 renderer 一旦调用旧的 `window.api` 没有的方法就是 `undefined is not a function`。
+
+搬不动的两处：Electron 的 `package.json → main` 字段（在你任何 JS 执行前就被读取），
+以及注册表文件自身的路径。/bootstrap 必须从一个已知位置起步。
 
 ## 已知限制
 

@@ -2,33 +2,30 @@
 // 职责：解析 release 工作树 → 启动即检测并 pull 更新 → 加载渲染层 →
 //       渲染层改动自动 reload（无重启）；主进程/preload/依赖改动提示重启。
 'use strict';
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const updater = require('./updater');
 
-const CONFIG = loadConfig();
+// CONFIG = 契约注册表：所有路径 / 开关 / bridge API 名单的唯一来源（见 registry.js）
+const CONFIG = require('./registry');
 let win = null;
 let appRoot = null;
 let lastStatus = null; // 缓存最近一次 checkUpdate 结果，reload/启动后直接复用，避免二次 fetch 造成「初始化…」空窗
 
-function loadConfig() {
-  const def = {
-    repoPath: path.resolve(__dirname, '../local/app-checkout'),
-    branch: 'release',
-    remote: 'origin',
-    appEntry: 'src/application/renderer/index.html',
-    useWorktree: false,
-    autoRestart: false,
-    autoPull: true,
-  };
-  try {
-    const user = JSON.parse(fs.readFileSync(path.join(__dirname, 'config.json'), 'utf8'));
-    return { ...def, ...user, repoPath: path.resolve(__dirname, user.repoPath || def.repoPath) };
-  } catch {
-    def.repoPath = path.resolve(__dirname, def.repoPath);
-    return def;
+
+// 契约自检：路径配置错了要在【窗口打开前】报清楚，而不是白屏或静默失败
+function verifyContract(appRoot) {
+  const missing = [];
+  const check = (label, p) => { if (!fs.existsSync(p)) missing.push(`${label}: ${p}`); };
+  check('appEntry', path.join(appRoot, CONFIG.appEntry));
+  check('rendererDir', path.join(appRoot, CONFIG.rendererDir));
+  check('preload', CONFIG.preloadPath);
+  if (missing.length) {
+    throw new Error('契约校验失败，以下路径不存在：\n  ' + missing.join('\n  ') +
+      '\n  请核对 src/application/registry.json 与 config.json');
   }
+  console.log('[contract]\n  ' + CONFIG.describe());
 }
 
 // 检测 + （可选）拉取。autoPull=true 时落后者直接 pull，并返回改动文件与是否需重启
@@ -48,8 +45,7 @@ async function checkUpdate(autoPull) {
 
   const files = await updater.diffFiles(cmp.local, cmp.remote, { cwd: appRoot });
   await updater.pull({ remote: CONFIG.remote, branch: CONFIG.branch, cwd: appRoot });
-  const rendererPrefix = path.dirname(CONFIG.appEntry) + '/';
-  const onlyRenderer = updater.onlyRendererChanges(files, rendererPrefix);
+  const onlyRenderer = updater.onlyRendererChanges(files, CONFIG.rendererPrefix);
   const newVersion = await updater.getVersion({ cwd: appRoot });
   return {
     ok: true, updated: true, behind: false,
@@ -62,7 +58,7 @@ function createWindow() {
   win = new BrowserWindow({
     width: 920, height: 620,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: CONFIG.preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
     },
@@ -90,7 +86,15 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
-  appRoot = await updater.resolveAppTree(CONFIG);
+  try {
+    appRoot = await updater.resolveAppTree(CONFIG);
+    verifyContract(appRoot);
+  } catch (e) {
+    console.error('[main] ' + e.message);
+    dialog.showErrorBox('启动失败：契约校验未通过', e.message);
+    app.quit();
+    return;
+  }
   // 启动即检测并按 autoPull 配置决定是否拉取（autoPull=true 时应用自动保持最新）
   lastStatus = await checkUpdate(CONFIG.autoPull);
   createWindow();

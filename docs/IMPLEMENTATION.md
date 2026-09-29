@@ -145,4 +145,8 @@ const onlyRenderer = updater.onlyRendererChanges(files, rendererPrefix);
 - **缺 `package.json` 的 `main` 字段**：Electron 默认找 `index.js`，入口是 `main.js` 会报 `Cannot find module` → 补 `"main": "src/application/main.js"`。
 - **bash 3.2 + 中文 + `set -u` 的 `${VAR?}` 未绑定崩溃** → 改 `set -eo pipefail` + `printf` 传参。
 - **reload 后「初始化…」空窗**：`did-finish-load` 每次页面加载完再 `fetch` 一次 GitHub 造成冗余空窗 → 加 `lastStatus` 缓存 + `update:config` 复用，不再二次 fetch。
-- **热更判定前缀写死 `'app/'`** → 改为由 `path.dirname(CONFIG.appEntry)` 推导，渲染层目录改名后判定仍正确。
+- **热更判定前缀写死 `'app/'`** → 改为由 `path.dirname(CONFIG.appEntry)` 推导，渲染层目录改名后判定仍正确；
+  再进一步收敛到 `registry.json` 的 `rendererDir`，由 `registry.js` 推导 `rendererPrefix`。
+- **契约散落在源码各处（路径 / 名单在多处重复）** → 引入 `src/application/registry.json` 作为唯一事实源，
+  `registry.js` 合并「静态默认值 + `config.json` 本机覆盖」。三道机器校验：`appEntry⊂rendererDir`、
+  启动时路径存在性、`bridgeApi` 名单与 `preload.js` 实现双向一致。
