@@ -1,7 +1,7 @@
 // renderer.js — 这是「会被热更新的应用本体」
 // FEATURE_VERSION 是演示标记：A 角色在 GitHub 发布新版本时改它，
 // 本地 pull 后渲染层 reload 即生效（无重启）。把它当成你的「易变业务逻辑」。
-window.FEATURE_VERSION = "V1";
+window.FEATURE_VERSION = "V2";
 
 // 注意：不要写 `const api = window.api`！contextBridge 暴露的 window.api 是
 // 不可配置(configurable:false)的全局属性，按 JS 规范同名 const 词法声明会直接
