@@ -8,7 +8,7 @@
     "start": "electron .",
     "setup": "bash scripts/setup.sh",
     "publish": "bash scripts/publish.sh",
-    "selftest": "node tools/real-remote-check.js"
+    "selftest": "node src/tools/real-remote-check.js"
   },
   "devDependencies": {
     "electron": "^44.4.5"

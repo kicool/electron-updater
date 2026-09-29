@@ -50,19 +50,19 @@ electron-git-pull-updater/                  ← 整个仓库就是「方案的�
 │   ├── IMPLEMENTATION.md                   # 设计与实现原理（四层逻辑、git 落点、热更判定）
 │   └── build.md                            # 如何构建 / 运行这个 Electron 应用
 ├── src/
-│   └── application/                        # Electron 壳（应用逻辑）
-│       ├── main.js                         # 启动器（主进程）：解析 release 树 → 检测/pull → 加载渲染层
-│       ├── updater.js                      # git 驱动的更新引擎（不依赖 electron，可单测）
-│       ├── preload.js                      # contextBridge 桥接层
-│       ├── renderer/                       # 渲染层 = 热更目标（改这里 → 无重启）
-│       │   ├── index.html
-│       │   └── renderer.js
-│       └── config.json                     # 安装脚本生成（含本机绝对路径），已被 .gitignore
+│   ├── application/                        # Electron 壳（应用逻辑）
+│   │   ├── main.js                         # 启动器（主进程）：解析 release 树 → 检测/pull → 加载渲染层
+│   │   ├── updater.js                      # git 驱动的更新引擎（不依赖 electron，可单测）
+│   │   ├── preload.js                      # contextBridge 桥接层
+│   │   ├── renderer/                       # 渲染层 = 热更目标（改这里 → 无重启）
+│   │   │   ├── index.html
+│   │   │   └── renderer.js
+│   │   └── config.json                     # 安装脚本生成（含本机绝对路径），已被 .gitignore
+│   └── tools/
+│       └── real-remote-check.js            # 验证「真实远程读取路径」(clone 公开仓库做 fetch/compare/diff)
 ├── scripts/
 │   ├── setup.sh                            # 用户首次安装：只 clone release 单分支 + 写 config
 │   └── publish.sh                          # 开发者发版：真实 push 到 GitHub release 分支
-└── tools/
-    └── real-remote-check.js                # 验证「真实远程读取路径」(clone 公开仓库做 fetch/compare/diff)
 ```
 
 ## 使用者流程（只想跑这个应用）

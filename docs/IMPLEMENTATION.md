@@ -125,7 +125,7 @@ const onlyRenderer = updater.onlyRendererChanges(files, rendererPrefix);
 | 开发态 | — | **解耦**：开发者 `git worktree` 拉 master，updater 不感知 |
 | 脚本 | setup / seed / publish / selftest | setup / publish / selftest（**无 seed**：仓库已是完整应用，无需引导播种） |
 | 拉取策略 | 固定自动 | `autoPull` 可切换「自动 / 仅提示」 |
-| 目录 | 扁平（main.js/app/...） | 规范分层：`docs/` + `src/application/` + `tools/` |
+| 目录 | 扁平（main.js/app/...） | 规范分层：`docs/` + `src/application/` + `src/tools/` |
 
 ---
 
