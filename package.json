@@ -1,0 +1,16 @@
+{
+  "name": "05-github-remote",
+  "version": "1.0.0",
+  "private": true,
+  "description": "基于 GitHub 远程 git-pull 的 Electron 应用更新方案（单一源：release 给用户、master 给开发）",
+  "main": "src/application/main.js",
+  "scripts": {
+    "start": "electron .",
+    "setup": "bash scripts/setup.sh",
+    "publish": "bash scripts/publish.sh",
+    "selftest": "node tools/real-remote-check.js"
+  },
+  "devDependencies": {
+    "electron": "^44.4.5"
+  }
+}

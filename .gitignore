@@ -1,0 +1,12 @@
+# 依赖与构建产物
+node_modules/
+
+# 安装脚本生成的本地 clone（用户机运行时数据，非源码）
+local/
+
+# 安装脚本按本机路径生成的配置（含绝对路径，不能提交）
+src/application/config.json
+
+# 日志与系统文件
+*.log
+.DS_Store
