@@ -18,17 +18,24 @@ kicool/electron-updater  （唯一源，GitHub）
         │
    git fetch / reset --hard  （本机 clone 副本去拉）
         │
-[本机 clone]  local/app-checkout            （release 工作树，应用 loadFile 加载它）
-             local/dev-master  （可选，开发者用 git worktree 拉出的 master 工作树，与运行态隔离）
+[本机]  electron-updater/    ← 开发侧：master 主仓，写代码/commit/V1 自验
+        electron-updater-release/  ← 开发侧：release 独立 clone，merge + push
+        electron-updater-user/     ← 用户侧：release 独立 clone，应用就加载它自己
 ```
 
 为什么需要两个分支（KISS / 奥卡姆）：
-- 一个 git 工作树同一时刻只能有一个分支的实时文件；应用要加载 `release` 且被 `reset --hard` 热更，
-  开发者又要在 `master` 改代码——两者物理隔离是硬约束。
-- `git worktree` 用 git 原生能力开出第二个目录（`dev-master`），**不引入任何自研同步/锁机制**，
-  实体最少、用现成原语，符合 KISS。
-- 纯用户机其实只要 `release` 单分支（`setup.sh` 默认 `--single-branch`），`master`/`dev-master` 是「开发态」的可选扩展，
-  完全在 `updater.js` 视野之外。
+- 一个 git 工作树同一时刻只能有一个分支的实时文件；开发者要在 `master` 改代码、用户要加载
+  `release` 并被 `reset --hard` 热更——两者**隔离**是硬约束，但隔离靠**目录/仓库份数**，
+  不是靠目录层级。
+- **1 份化（当前形态）**：加载树就是仓库自己（`repoPath` 默认 `..`，相对 `shellDir` 解析 = 仓库根），
+  不再另开第二份目录。renderer / preload / registry 三者**同源、同一次 pull**，
+  直接消灭「pull 后 renderer 是新的、preload 是旧的」这类契约错配的根因。
+- 旧形态的 `local/app-checkout` + `local/dev-master` 双目录**已废弃**：那份第二目录本来就是多余的
+  （`reset --hard` 只动 tracked 文件，而 `node_modules/`、`config.json` 都在 `.gitignore` 里）。
+- 保护机制随形态一起改：1 份化后不再靠物理隔离兜底，靠 **`updater.js` 的 dirty check**
+  （pull 前 `git status --porcelain --untracked-files=no` 非空则拒绝拉取并回报）。
+- 开发侧长期目录是 **master 主仓 + release 独立 clone** 两份；临时并行任务用 `git worktree`
+  （用完即删）。模拟用户必须**独立 clone**（与真实用户同构：自有 `.git`、自有 remote）。
 
 ---
 
@@ -106,13 +113,14 @@ const onlyRenderer = updater.onlyRendererChanges(files, rendererPrefix);
 
 | 路径 | 角色 | 怎么来 |
 |---|---|---|
-| `local/app-checkout` | **用户机 clone 的 release 工作树** | `setup.sh` 跑 `git clone -b release --single-branch` 到这里；应用只加载它 |
-| `local/dev-master` | **开发者 master 工作树（可选）** | 开发者 `git worktree add ../dev-master master`；`updater.js` 完全不知道它 |
-| `kicool/electron-updater` 远程 | **唯一源 / 发布目标** | `publish.sh` 或开发者手动 `merge master→release && push` |
-| `src/application/renderer/` | **应用源文件模板（热更目标）** | 仓库自带，用户 clone 后由 `local/app-checkout` 持有运行副本 |
+| 仓库根目录 | **加载树本身（1 份化）** | 用户 `git clone -b release` 后就是它；`setup.sh` 只写 `config.json`（`repoPath`= 本目录） |
+| `electron-updater-release/` | **开发侧 release 独立 clone** | `git clone` 全分支 → `checkout -b release origin/release`，在这里 merge + push |
+| `electron-updater-user/` | **用户侧独立 clone** | 与真实用户同构（自有 `.git`/remote），应用加载它自己 |
+| `kicool/electron-updater` 远程 | **唯一源 / 发布目标** | 开发者在 release clone 里 `merge FETCH_HEAD && push`（https 推不动时用 SSH URL） |
+| `src/application/renderer/` | **应用源文件（热更目标）** | 仓库自带，就在加载树里，`reset --hard` 后直接生效（无重启热更） |
 
-> 早期版本用「主仓库 master + worktree 出 release」双目录；本版按奥卡姆精简为「默认只 clone release 单分支」，
-> 开发态（master worktree）与本升级方案**解耦**，开发者按需自行开 worktree。
+> 历史沿革：早期是「主仓库 master + worktree 出 release」双目录 → 再简化为「默认只 clone release 单分支
+> 到 `local/app-checkout`」→ **当前是 1 份化**：加载树=仓库自己，不再有任何第二份目录。
 
 ---
 
