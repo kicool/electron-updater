@@ -93,6 +93,9 @@ npm start          # 等价于 `electron .`，Electron 读取 package.json 的 m
 - **`sandbox initialization failed: Operation not permitted`**：在受限执行环境（CI / 被沙箱包裹的进程）里启动会失败，
   临时解法加 `--no-sandbox`：`./node_modules/electron/dist/Electron.app/Contents/MacOS/Electron . --no-sandbox`。
   （仅本地排障用，正式运行不要加）
-- **想不建 `local/app-checkout` 直接跑**：仓库本身就是应用源码，把 `src/application/config.json` 的
-  `repoPath` 指向仓库根目录即可。⚠️ 但 pull 是 `reset --hard`，务必先提交或保持 `autoPull: false`，
-  否则未提交的改动会被远程版本覆盖。
+- **仓库根目录直接就是加载树（1 份化后的默认形态）**：`registry.json` 的 `repoPath` 默认 `".."`
+  （相对 `shellDir`=`src/application` 解析 = 仓库根），无需第二份目录。
+  配套保护：`updater.js` 的 `isDirty()` 会在 pull 前检查 tracked 改动，非空则**拒绝拉取并回报**
+  （`git status --porcelain --untracked-files=no`——只看 tracked，因为 `reset --hard` 只抹 tracked，
+  拦 untracked 属于过度保护：用户的数据文件/日志不该让更新直接失败）。
+  ⚠️ 已知过渡期缺口：执行更新的**是旧壳**，若旧版本还没 `isDirty()`，这一跳没有 dirty 保护。
