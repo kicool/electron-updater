@@ -48,6 +48,7 @@ electron-git-pull-updater/                  ← 整个仓库就是「方案的�
 ├── package.json                            # main: src/application/main.js；scripts: start/setup/publish/selftest
 ├── docs/
 │   ├── IMPLEMENTATION.md                   # 设计与实现原理（四层逻辑、git 落点、热更判定）
+│   ├── contract-and-release-flow.md        # ★ 文件契约 + 分支工作流（含测试矩阵、环境坑）
 │   └── build.md                            # 如何构建 / 运行这个 Electron 应用
 ├── src/
 │   ├── application/                        # Electron 壳（应用逻辑）
@@ -144,6 +145,8 @@ bash scripts/publish.sh git@github.com:<你>/<repo>.git
 `config.json` 由 `setup.sh` 自动写好指向本地 clone，其余代码无需改动。
 
 ## 文件契约（改动前必读）
+
+> 完整方案（含 dev/正式一致性分析、工作流命令序列、测试矩阵、环境坑）见 **`docs/contract-and-release-flow.md`**。
 
 本方案没有编译期、没有打包器——**路径和 API 名就是全部契约，且只在运行时兑现**。
 所有契约集中在 `src/application/registry.json`（唯一事实源，进 git），由 `registry.js` 解析后供各处取用：
