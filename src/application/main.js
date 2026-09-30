@@ -5,6 +5,7 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { execFile } = require('child_process');
 const updater = require('./updater');
 const classifier = require('../update-kit/core/classifier');
 const upolicy = require('../update-kit/core/policy');
@@ -155,6 +156,17 @@ async function checkUpdate(opts = {}) {
     };
   }
 
+  // D2/D4：检查本地是否领先远程（未推送的 commit）
+  // reset --hard 会丢弃未推送的 commit，所以 ahead > 0 时拒绝自动拉取
+  const { ahead, behind } = await updater.aheadBehind({ remote: CONFIG.remote, branch: CONFIG.branch, cwd: appRoot });
+  if (ahead > 0) {
+    console.log(`[main] 本地领先 ${ahead} 个 commit，拒绝自动拉取（避免丢失未推送的提交）`);
+    return {
+      ok: true, updated: false, behind: true, version, offline: false, mode,
+      blocked: 'ahead', aheadCount: ahead, behindCount: behind,
+    };
+  }
+
   const plan = await classifyPending(cmp);
   console.log(`[main] 更新分类: klass=${plan.klass} action=${plan.action}` +
     (plan.targetContract ? ` 契约 ${CONFIG.contractVersion}→${plan.targetContract}` : ''));
@@ -163,6 +175,10 @@ async function checkUpdate(opts = {}) {
   // deps 单元：action=npm-ci-then-relaunch。默认不自动跑 npm ci（耗时且可能失败，待实测），
   // 只把它标出来；开启 constraints.autoNpmCi 后才真正执行，失败则按 fallback 升级为 reinstall。
   const needNpmCi = plan.units.some((u) => u.action === 'npm-ci-then-relaunch');
+
+  await updater.pull({ remote: CONFIG.remote, branch: CONFIG.branch, cwd: appRoot });
+
+  // npm ci 必须在 pull 之后执行，否则装的是旧 lockfile 的依赖
   if (needNpmCi && POLICY.constraints && POLICY.constraints.autoNpmCi) {
     const r = await runNpmCi();
     if (!r.ok) {
@@ -173,8 +189,6 @@ async function checkUpdate(opts = {}) {
       plan.reasons.push('npm ci 成功，deps 单元降级为 relaunch');
     }
   }
-
-  await updater.pull({ remote: CONFIG.remote, branch: CONFIG.branch, cwd: appRoot });
   const newVersion = await updater.getVersion({ cwd: appRoot });
   envInfo = await collectEnv(); // pull 后 HEAD 变了，抬头要跟着更新
   return {
@@ -189,7 +203,6 @@ async function checkUpdate(opts = {}) {
 }
 
 function runNpmCi() {
-  const { execFile } = require('child_process');
   const timeoutMs = (POLICY.constraints && POLICY.constraints.npmCiTimeoutMs) || 300000;
   return new Promise((resolve) => {
     execFile('npm', ['ci'], { cwd: appRoot, timeout: timeoutMs, maxBuffer: 1024 * 1024 * 8 },
