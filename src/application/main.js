@@ -32,7 +32,7 @@ function verifyContract(appRoot) {
 // 采集「环境抬头」：让界面能自证加载的是哪棵树、根在哪、入口相对根是什么。
 // 验收时第一件事就是看这个 —— 否则改了 A 树、看的却是 B 树，效果对了也是白验。
 async function collectEnv() {
-  const git = (args) => updater.runGit(args, { cwd: appRoot }).catch(() => null);
+  const git = (args) => updater.runGit(args, appRoot).catch(() => null); // runGit 第二参是裸 cwd 字符串，不能传对象
   const [head, ref] = await Promise.all([
     git(['rev-parse', '--short', 'HEAD']),
     git(['rev-parse', '--abbrev-ref', 'HEAD']),
