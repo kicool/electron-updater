@@ -93,10 +93,22 @@ async function getVersion({ cwd }) {
   return runGit(['describe', '--tags', '--always'], cwd).catch(() => 'unknown');
 }
 
+// 检查本地与远程的领先/落后关系
+// ahead > 0：本地有未推送的 commit（reset --hard 会丢弃）
+// behind > 0：远程有未拉取的 commit
+// ahead > 0 且 behind > 0：分叉
+async function aheadBehind({ remote, branch, cwd }) {
+  const out = await runGit(['rev-list', '--left-right', '--count', `HEAD...${remote}/${branch}`], cwd)
+    .catch(() => null);
+  if (!out) return { ahead: 0, behind: 0, error: 'git rev-list 执行失败' };
+  const [ahead, behind] = out.split('\t').map(Number);
+  return { ahead, behind };
+}
+
 // 注：「改动是否只动渲染层」的判定已从本文件移除，改由
 //   src/update-kit/core/classifier.js 的 classify() 基于 updateUnits 白名单判定。
 // 旧实现 onlyRendererChanges() 是路径前缀启发式，会误报（改 docs 也判「需重启」，已实证），
 // 已删除以免留下第二套判据。
 module.exports = {
-  runGit, resolveAppTree, fetch, compare, diffFiles, pull, getVersion, isDirty,
+  runGit, resolveAppTree, fetch, compare, diffFiles, pull, getVersion, isDirty, aheadBehind,
 };
