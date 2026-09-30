@@ -18,15 +18,18 @@
                      │ 开发者 merge master→release 并 push
                      │
             ┌────────┴────────┐
-      开发者机器             用户机器
-    clone master + worktree   clone release（单分支，只读运行）
-    （用 git worktree 让两      → local/app-checkout
-     分支同时落在不同目录）        → 应用 loadFile 加载它
+      开发者机器（两份）       用户机器（一份）
+    electron-updater       electron-updater-user
+      master，主仓            release，独立 clone
+    electron-updater-release   应用加载自己的仓库根目录
+      release，独立 clone
 ```
 
 - **用户**：只拿 `release` 单分支，应用启动即检测并自动（或手动）pull `release`。
-- **开发者**：在 `master` 上改代码，验证后合并到 `release` 并 push；用户侧下次 pull 即拿到。
-- 两分支在同一台机器上靠 **`git worktree`** 隔离到不同目录，互不踩（见「开发者流程」）。
+- **开发者**：在 `master` 上改代码，验证后在 **release 独立 clone** 里合并并 push；用户侧下次 pull 即拿到。
+- 目录机制判据：**长期用 clone，临时用 worktree**。三份长期目录都是真仓库（自有 `.git`、自有 remote），
+  互不共享 git 引用；`git worktree` 只用于临时并行任务，用完即删（详见
+  `docs/contract-and-release-flow.md` 第 6.1.1 节）。
 
 ## 更新机制
 
@@ -64,10 +67,26 @@ electron-git-pull-updater/                  ← 整个仓库就是「方案的�
 │   └── tools/
 │       └── real-remote-check.js            # 验证「真实远程读取路径」(clone 公开仓库做 fetch/compare/diff)
 ├── scripts/
-│   ├── setup.sh                            # 用户首次安装：只 clone release 单分支 + 写 config
+│   ├── setup.sh                            # 用户首次安装：只写 config.json（repoPath = 本目录）
 │   ├── publish.sh                          # 开发者发版：真实 push 到 GitHub release 分支（演示脚本，非真实发版通道）
-│   └── verify.sh                           # ★ 验收切换器：一键切到 dev / merge / user 三档加载树并启动
+│   ├── verify.sh                           # ★ 验收切换器：dev（主仓自身）/ user（指定用户目录，--at 回退）
+│   └── electron-once.sh                    # Electron 130MB 只下一次：按 @electron/get 算法对齐缓存（硬链接）
 ```
+
+### 本机目录布局（三份长期目录）
+
+```
+~/workspace.team/
+├── electron-updater/          ← master：主仓，开发 + commit + V1 自验（加载树 = 它自己）
+├── electron-updater-release/  ← release：独立 clone，merge + push（加载树 = 它自己）
+└── electron-updater-user/     ← release：独立 clone，模拟真实用户（加载树 = 它自己）
+```
+
+**每一份目录自己就是加载树** —— 不再有 `local/app-checkout` 之类的第二份。
+这样 renderer / preload / registry 三者同源、同一次 pull，**契约错配没有物理土壤**。
+
+判据一句话：**这份目录要不要长期存在** —— 长期用 clone，临时用 `git worktree`（用完即删）。
+worktree 与主仓**共享 refs**，在其中 `fetch` 会改主仓的 `origin/release`，所以**不要用它模拟用户**。
 
 ## 使用者流程（只想跑这个应用）
 
@@ -88,10 +107,15 @@ ssh -T git@github.com             # 看到 "Hi <you>! You've successfully authen
 > **前提**：Node **≥ 22.12.0**（electron@44 硬性要求），仓库带 `.nvmrc`，`nvm use` 即可切换。
 
 ```bash
-bash scripts/setup.sh             # 只 clone release 单分支到 local/app-checkout，并写 config
+git clone -b release <仓库URL> 我的应用 && cd 我的应用   # 拿到仓库本身
+bash scripts/setup.sh             # 只是写 config.json（repoPath = 本目录），不再 clone 第二份
 npm install && npm start          # 装 electron 并启动
 ```
 窗口显示：版本号 / 功能标记 `V1` / 「✓ 已是最新（release）」。
+
+**这个目录本身就是应用加载的目录**（1 份化：`repoPath` 默认就是仓库根）。
+代价是：**别在这里放未提交的改动** —— 更新用 `reset --hard`，会抹掉 tracked 改动。
+启动时主进程会做 **dirty check**：有未提交改动就拒绝自动拉取并提示，不会静默毁掉。
 `docs/build.md` 有完整的构建 / 运行说明（含 electron 二进制下载、源码运行等）。
 
 ### 2. 接收更新（热更）
@@ -102,37 +126,53 @@ npm install && npm start          # 装 electron 并启动
 
 ## 开发者流程（要发新版本）
 
-默认安装只拿 `release` 单分支、**不拉 master、不建 worktree**——绝大多数用户只跑不开发。
-开发者需要往 `release` 发版时，用 **`git worktree`** 在同一台机器上同时持有两分支，且与应用运行时**物理隔离**：
+用户只拿 `release` 单分支；开发者在一台机器上持**两份独立 clone**：`master` 主仓 + `release` clone。
+两者都是真仓库（自有 `.git`、自有 remote），互不共享引用，因此**合并操作碰不到主仓任何文件**。
 
 ```bash
-cd electron-git-pull-updater/local/app-checkout
-# 单分支 clone 默认不含 master，先取回引用（不动运行中的 release 文件）
-git fetch origin master:master
-# 用 worktree 拉出开发用的 master 工作树（独立目录，不与应用运行时互相踩）
-git worktree add ../dev-master master
-```
-
-```
-local/
-├── app-checkout/     ← release 工作树，应用运行时只加载这里（updater.js 唯一可见）
-└── dev-master/       ← master 工作树，你的开发沙箱（updater.js 完全不知道它存在）
-```
-
-```bash
-cd ../dev-master
-# 在这里改代码（比如改 src/application/renderer/renderer.js 的业务逻辑）
+# 1) 在 master 主仓开发并提交
+cd ~/workspace.team/electron-updater
 git add -A && git commit -m "feat: ..."
-# 开发完：把改动合并到 release 并 push（merge 或 cherry-pick 都行）
-git checkout -B release origin/release
-git merge master            # 或 git cherry-pick <commit>
-git push origin release --tags
+
+# 2) V1 自验（主仓自己当加载树；skipUpdate=true，不联网）
+npm run verify dev
+
+# 3) 到 release clone 里合并
+cd ../electron-updater-release
+# ⚠️ 取「本地已验证的 master」，不是 origin/master：master 未必已 push，
+#    origin/master 可能还是旧指针，merge 它会静默漏掉本地提交
+git fetch ../electron-updater master      # → FETCH_HEAD = 主仓 master 当前位置
+git merge FETCH_HEAD                      # 需要 committer 身份 → 见下
+
+# 4) V2 判据：合并后与 master 逐字节一致
+git diff --stat FETCH_HEAD    # 必须为空
+
+# 5) push —— 外部动作，执行前必须确认
+git push git@github.com:kicool/electron-updater.git release --tags
 ```
+
+**能否免 merge？** `git merge-base --is-ancestor origin/release master` 为真时可直接
+`git push origin master:release` 快进。当前为**假**（release 有 2 个 master 不含的提交），
+所以**每次发版都要真 merge**。
+
+两个本机坑（均已实测）：
+
+1. **git 身份未配置**（local / global 都没有 `user.name` / `user.email`），merge 需要 committer，
+   而 `git -c` 注不进脚本内部调用 → 用**环境变量**包住：
+
+   ```bash
+   GIT_AUTHOR_NAME="AI-Test" GIT_AUTHOR_EMAIL="ai-test@AI-NativedeMacBook-Pro.local" \
+   GIT_COMMITTER_NAME="AI-Test" GIT_COMMITTER_EMAIL="ai-test@AI-NativedeMacBook-Pro.local" \
+   git merge origin/master
+   ```
+
+2. **https 远端推不动**（`terminal prompts disabled`，keychain 里也没有凭证）；SSH 可用
+   （`ssh -T git@github.com` → `Hi kicool!`）→ 本次直接用 SSH URL，**不改 remote 配置**。
 
 要点：
-- `updater.js` 永远只认 `local/app-checkout`（`release` 工作树），对 `dev-master` 一无所知、互不干扰。
-- `dev-master` 是你自己的开发沙箱，不是方案的一部分；换机器 / 重装时随时可丢弃重建。
-- 想彻底不要开发能力，就只用 `setup.sh` + `publish.sh`，永远不碰 `git worktree`——这正是默认形态。
+- `updater.js` 只认 `config.json.repoPath` 指向的那棵树，对另一份目录一无所知。
+- `electron-updater-user` 是**用户模拟**目录：只跑应用，不做 merge / commit，避免污染验收环境。
+- 临时想跑一个旧版本对比 → `git worktree add /tmp/eu-old <sha>`，跑完 `git worktree remove`。
 
 > 嫌手工 merge 麻烦？`scripts/publish.sh` 可一键模拟 A 角色发版（独立 clone → 改 `FEATURE_VERSION` → 打 tag → push `release`）。
 > 注意它是**演示脚本**，不会把 master 的成果 merge 过去，真实发版走上面的手动 merge 流程。
@@ -147,19 +187,24 @@ git push origin release --tags
 | 树 | 加载树身份（`treeLabel`，来自 `config.json`；未设则退化为目录名） |
 | 根目录（绝对） | 加载树根的实际绝对路径 |
 | 入口（相对根） | 渲染层入口相对该根的路径 |
-| preload（相对根） | preload 相对该根的路径；出现 `../` 说明它来自运行中的壳，**改动需重启生效** |
+| preload（相对根） | 1 份化后应为 `src/application/preload.js`（**树内**）；若出现 `../` 说明壳与加载树不同源，**改动需重启生效** |
 | 比对分支 / HEAD | 跟哪个分支比对、本地 HEAD；`detached` 表示分离头 |
 | autoPull | 开（自动拉取）/ 关（仅提示） |
 
-三档验收用 `scripts/verify.sh` 一键切换（它负责建树并写好 `config.json` 的 `treeLabel` / `repoPath`）：
+两档验收用 `scripts/verify.sh` 切换（它负责写好 `config.json` 的 `treeLabel` / `repoPath`）：
 
 ```bash
-npm run verify dev      # V1 开发自验：dev-master（分离头 master，不拉取）
-npm run verify merge    # V2 合并验：dev-release（release + merge master），判据 git diff master 为空
-npm run verify user     # V3 用户态：app-checkout（与用户同构），加 --at <旧sha> 可验更新过程
+npm run verify dev                    # V1：主仓自身（master，不联网）
+npm run verify user                   # V3：准备用户目录（默认 ../electron-updater-user）
+npm run verify user --dir <path>      # 指定别的用户目录
+npm run verify user --at <旧sha>      # 回退到旧版本，用于验「更新过程」
 ```
 
-V1 刻意用**分离头**：即使误开 autoPull，`reset --hard` 也只移动 HEAD，不会动 master 分支指针、不污染主工作树。
+1 份化后**不再建 worktree、也没有 merge 档** —— V2 判据改在 `electron-updater-release` 里做：
+`git diff --stat FETCH_HEAD` 必须为空（见「开发者流程」）。
+
+V1 档 `autoPull=false` + `skipUpdate=true` 双保险：主仓是正在开发的树，
+即使误触发也不会拉取、不会 `reset --hard`；万一真触发，dirty check 也会拦住。
 
 ## 换成其他仓库
 
@@ -239,6 +284,9 @@ npm config set electron_mirror https://npmmirror.com/mirrors/electron/
 
 ## 已知限制
 
+- **用户的仓库目录不能再放未提交改动**（1 份化后加载树就是它自己）：更新用 `reset --hard`，
+  会抹掉 tracked 改动。启动时 dirty check 会拦住自动拉取并提示，但拦不住「明知有改动还指望保留」。
+  → 运行时数据 / 日志一律放仓库外，或放进 gitignore（untracked 不会被 `reset --hard` 删除）。
 - 必须**源码运行**（`electron .`），放弃签名 / asar / 商店分发——团队内部、能装 git 的前提。
 - 主进程 / preload / `node_modules` 改动仍需重启；`package.json` 变时 pull 后应 `npm ci` + 重启（骨架未自动做）。
 - Electron 框架 / 原生模块 git 改不了，只能整体换版本。

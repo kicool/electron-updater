@@ -25,6 +25,11 @@
 3. `preload.js` 属于壳、**不参与热更**，所以 pull 之后「渲染层是新的、桥是旧的」——
    新版 renderer 调用旧版 `window.api` 没有的方法，就是 `undefined is not a function`。
 
+   > **1 份化（`4f4504f`）后本条的根因被消除**：加载树 = 仓库自身，preload 落在树内
+   > （抬头实测：`../../src/application/preload.js` → `src/application/preload.js`），
+   > 与 renderer、registry 三者同源、同一次 pull。
+   > 风险从「结构性错配」降级为「同一批更新内的加载时序」（preload 改动是否需重启，待实测）。
+
 第 3 条是整套设计里风险最高的一处，也是下面三道闸门主要守的东西。
 
 ---
@@ -50,7 +55,7 @@
   "autoRestart": false,
   "autoPull": true,
   "paths": {
-    "repoPath": "../../local/app-checkout",
+    "repoPath": "..",
     "preload": "preload.js",
     "appEntry": "src/application/renderer/index.html",
     "rendererDir": "src/application/renderer",
@@ -108,9 +113,10 @@ repoRoot = appRoot（代码树根）      应用加载的根     → appEntry / 
 
 **唯一需要区分的东西是本机绝对路径**，所以它单独待在 gitignore 的 `config.json` 里。
 
-> 本项目曾犯的错（记录在案）：把 `config.json.repoPath` 指向了仓库根目录，
-> 也就是正在开发的 master 工作树——而 pull 是 `reset --hard`，会抹掉未提交改动，
-> 同时也违反 README「运行时与开发树物理隔离」的原则。
+> 历史注记：早期曾把 `config.json.repoPath` 指向仓库根（正在开发的 master 工作树），
+> 当时判为错误，理由是「运行时与开发树必须物理隔离」。
+> **1 份化（`4f4504f`）后这条被推翻**：加载树就是仓库自己，隔离不再是前提，
+> 保护改由 `updater.js` 的 dirty check 承担（见 6.3 红线第 1 条）。
 
 ---
 
@@ -123,42 +129,100 @@ GitHub: kicool/electron-updater
 ├── master    开发分支（所有改动先落这里）
 └── release   用户分支（应用运行时加载 + 自动 pull 的目标）
 
-开发者本机：
-<repo>/                     ← master 工作树：写代码、commit
-<repo>/local/dev-release/   ← release 工作树：验证目标（git worktree add）
-<repo>/local/app-checkout/  ← release 检出：模拟真实用户（setup.sh 生成）
+开发者本机（两份长期目录）：
+workspace.team/electron-updater/          ← master：主仓，写代码、commit、V1 自验
+workspace.team/electron-updater-release/  ← release：独立 clone，merge + push + 准用户态验收
+
+用户模拟（一份）：
+workspace.team/electron-updater-user/     ← release 独立 clone，与真实用户同构
 ```
 
-**运行时只认最下面两个，永远不认最上面那个。**
+**三份都是独立仓库（真 `.git` 目录），互不共享引用。**
+**且每一份自己就是加载树**（1 份化：`repoPath` 默认 = 仓库根），不再有第二份检出。
+
+### 6.1.1 目录机制的选择判据：长期用 clone，临时用 worktree
+
+| 用途 | 机制 | 理由 |
+|---|---|---|
+| master 主仓 | 主工作树 | 日常开发所在，1 份化后它自己就是加载树 |
+| 开发侧 release | **独立 clone** | 长期存在 + 完全隔离（worktree 与主仓**共享 refs**，在其中 `fetch` 会改主仓的 `origin/release`） |
+| 用户模拟 | **独立 clone** | 与真实用户同构：自有 `.git`、自有 remote、自有凭证 |
+| 临时并行（跑旧版本对比等） | **git worktree，用完即删** | 省磁盘、不需 `npm install`；但共享 refs，**不要用它模拟用户** |
+
+> 早期版本曾把 `local/dev-release` 建成 worktree、把 `local/app-checkout` 建成第二份检出，
+> 导致开发侧 3 份目录、用户侧 2 份。现已收敛：clone 负责长期，worktree 只负责临时。
 
 ### 6.2 命令序列
 
 ```bash
-# 1) 在 master 上开发并提交
+# 1) 在 master 主仓开发并提交
+cd workspace.team/electron-updater
 git add -A && git commit -m "..."
 
-# 2) 拉出 release 验证目标（这一步不是合并，只是给应用一个和用户同构的加载目标）
-git fetch origin
-git worktree add local/dev-release release
+# 2) V1 自验：主仓自己当加载树，抬头应显示该树身份
+npm run verify dev
 
-# 3) config.json 指向该验证目标
-#    { "repoPath": "<abs>/local/dev-release", "branch": "release", "autoPull": false }
+# 3) 到 release clone 里合并（主仓始终停在 master，一步都不动）
+cd ../electron-updater-release
 
-# 4) （可选）在这棵树上预演合并后的状态
-cd local/dev-release && git merge master
+# 3a) ⚠️ 取「本地已验证的 master」，不是 origin/master
+git fetch ../electron-updater master      # → FETCH_HEAD = 主仓 master 的当前位置
+#    master 未必已 push：origin/master 可能还是旧指针，merge 它会静默漏掉本地提交。
+#    实测（2026-09-29）：origin/master=c0ec640，主仓 master=58173e5，二者差 11 文件 452 行。
+#    若已确认 master 已 push，则 `git fetch origin && git merge origin/master` 等价。
 
-# 5) 跑测试矩阵（第 8 节），通过后 —— 这一步是外部动作，需确认 ——
-git checkout -B release origin/release
-git merge master
-git push origin release --tags
+# 3b) 合并（需要 committer 身份 → 见 6.2.1）
+git merge FETCH_HEAD
+
+# 4) V2 判据：合并后与本地 master 逐字节一致
+git diff --stat FETCH_HEAD    # 必须为空
+
+# 5) push —— 外部动作，执行前必须确认
+git push git@github.com:kicool/electron-updater.git release --tags
 ```
+
+### 6.2.1 两个本机坑（均已实测）
+
+1. **git 身份未配置**（local / global 都没有 `user.name` / `user.email`）：merge 需要 committer，
+   而 `git -c` 注不进脚本内部调用 → 用**环境变量**包住：
+
+   ```bash
+   GIT_AUTHOR_NAME="AI-Test" GIT_AUTHOR_EMAIL="ai-test@AI-NativedeMacBook-Pro.local" \
+   GIT_COMMITTER_NAME="AI-Test" GIT_COMMITTER_EMAIL="ai-test@AI-NativedeMacBook-Pro.local" \
+   git merge origin/master
+   ```
+
+2. **https 远端推不动**：`could not read Username for 'https://github.com': terminal prompts disabled`
+   （需要 PAT，keychain 里也没有凭证）；而 SSH 可用（`ssh -T git@github.com` → `Hi kicool!`）。
+   → 本次直接用 SSH URL，**不改 remote 配置**。
+
+### 6.2.2 能否免 merge
+
+```bash
+git merge-base --is-ancestor origin/release master
+# 为真 → release 上没有 master 不含的提交，可 git push origin master:release 一步快进
+# 为假 → 必须真 merge，否则 push 会被拒绝（非快进）
+```
+
+当前判据为**假**：release 上有 2 个 master 不含的提交（v2 演示提交 + 上一次的 merge commit），
+所以**每次发版都要真 merge**。想恢复快进能力，需把 release 的独有提交先并回 master。
 
 ### 6.3 红线
 
-1. **绝不能把 `repoPath` 指向正在开发的 master 工作树**（`reset --hard` 会抹改动）。
+1. **pull 绝不许静默毁掉用户的改动**。1 份化后加载树就是用户自己的仓库根目录，
+   保护手段从「物理隔离」换成**机制**：`updater.js` 的 `isDirty()`
+   （`git status --porcelain --untracked-files=no`）在 pull 前检查，有 tracked 改动就拒绝拉取并回报。
+   > 旧红线「绝不能把 `repoPath` 指向正在开发的树」已被本条取代：
+   > 隔离不再是前提，**兜底才是**。只看 tracked 是刻意的——`reset --hard` 只抹 tracked，
+   > 拦 untracked 属于过度保护（受控实验已验证：reset 后 untracked 文件仍在）。
 2. 先验证、后合并；**测试没做完就不要把改动并进 release**。
 3. `push origin release --tags` 属于外部动作，执行前必须确认。
 4. 版本号来自 `git describe --tags`，发版要打 tag，否则 UI 只显示短 sha。
+5. **不要在用户模拟目录（`electron-updater-user`）里做 merge / commit** —— 会污染验收环境，
+   开发侧的 release 操作一律在 `electron-updater-release` 里做。
+6. release clone 里 merge **前必须先取到主仓 master 的真实位置**（`git fetch ../electron-updater master`，
+   或确认已 push 后 `git fetch origin`）。**不要盲信 `origin/master`** —— 它可能是旧指针（见 6.2 第 3a 步）。
+   这也是独立 clone 相对 worktree 的代价：clone 看不到主仓的本地分支，worktree 能（但共享 refs）。
 
 ---
 
@@ -178,15 +242,18 @@ git push origin release --tags
 
 | # | 用例 | 状态 |
 |---|---|---|
-| T1 | 契约校验 + registry 解析 | 已过（master 树上打印 `[contract]`）；需在 release 工作树重跑 |
+| T1 | 契约校验 + registry 解析 | **已过**（V1 抬头实测：`[contract]` 打印 + 窗口正常） |
 | T2 | `npm run selftest` | 已过 |
-| T3 | **渲染层无重启热更**：`publish.sh` → 界面自动刷新为 V2 | **未验证**（方案核心卖点） |
-| T4 | 壳改动 → 提示需重启 → `relaunch()` | 未验证 |
+| T3 | **渲染层无重启热更**：改 renderer → 界面自动刷新 | **未验证**（方案核心卖点，需一次纯渲染层改动 + 真实 push） |
+| T4 | 壳改动 → 提示需重启 → `relaunch()` | 环境已就绪：用户树已回退到 `103e1b2`，node 侧预测 `onlyRendererChanges=false` → 应提示重启；**待用户跑 `npm start` 确认** |
 | T5 | `autoPull=false` 仅提示 + 「更新」按钮 | 未验证 |
 | T6 | 离线降级（远端不可达） | 未验证 |
 | T7 | 全新安装：`setup.sh` → `npm start` | 未验证 |
+| T8 | Electron 二进制缓存对齐（`electron-once.sh`） | **已过**：官方 / npmmirror 两个真实 URL 全部命中，硬链接共享 inode，占用恒 592M |
+| T9 | preload 沙箱（Electron 20+ 默认 `sandbox: true` 致 `require('./registry')` 抛错） | **已修并验过**：`webPreferences` 加 `sandbox: false`，V1 截图确认 `window.api` 恢复 |
 
 T3 / T4 需要真实 push 到 GitHub release 分支，属外部动作。
+T4 的当前环境：`/Users/aidev/workspace.team/electron-updater-user`（加载树已回退到 `103e1b2`）。
 
 ---
 
@@ -203,7 +270,18 @@ T3 / T4 需要真实 push 到 GitHub release 分支，属外部动作。
 
 ## 10. 后续 TODO
 
-- [ ] 补 README 一套「直接在仓库根目录开发」的等价流程（现有流程假设先有 `local/app-checkout`）
+- [x] **「1 份化」改造**（`4f4504f`，已完成）：用户侧 1 份目录、开发侧 2 份，加载树 = 仓库自身
+      - [x] `registry.json` 默认 `repoPath` = `..`（仓库根）→ preload 从树外回到树内
+      - [x] `updater.js` 新增 `isDirty()`：pull 前查 tracked 改动，有则拒绝（含受控实验验证）
+      - [x] `setup.sh` 不再 clone 第二份，只写 `config.json`
+      - [x] `verify.sh` 三档 → 两档（`dev` = 主仓自身 / `user` = 指定用户目录 + `--at`）
+      - [x] 清掉遗留的 `local/dev-master` / `local/dev-release` worktree
+      - [ ] **待验**：V1 窗口抬头显示 preload 树内；V3 用户态自动 pull（需先 push release + 用户目录同步）
+      - 连带收益已兑现：renderer / preload / registry 三者同源、同一次 pull（第 1 节第 3 条已改写）
+- [ ] 实测「preload 改动是否 reload 即生效」（1 份化后它进了 pull 覆盖范围，理论上 reload 会重读文件，
+      **未实测**；若成立则 preload 类改动无需重启，热更判据可放宽）
 - [ ] 给 renderer 加轻量 manifest，声明所需 bridge API 版本，由 preload 启动时比对（目前只校验名单一致，未做版本协商）
 - [ ] `package.json` 变更后自动 `npm ci` + 重启（目前是契约缺口）
 - [ ] 跑完第 8 节测试矩阵并回填结果
+- [ ] 决定 git 身份：是配置一次 `git config user.name/email`，还是继续每次 `-c` / 环境变量单次指定
+      （当前沿用 `AI-Test <ai-test@AI-NativedeMacBook-Pro.local>`）
