@@ -1,58 +1,46 @@
 #!/usr/bin/env bash
-# 用户首次安装：只 clone 真实 GitHub 仓库的【release 分支】(单分支，不含 master)，
-# 写 config.json（useWorktree=false，应用直接加载这个 release 工作树）。
-# 设计原则：默认用户只跑不开发 → 只拿 release；开发态(master worktree)与本升级方案解耦，
-# 开发者自行用 git worktree 拉出（见 README「本地开发」一节），updater.js 等代码不体现 master。
+# 用户首次安装（1 份化）：本目录本身就是加载树，不再 clone 第二份。
+# 只做两件事：写 config.json（指向仓库根）+ 对齐 Electron 二进制缓存。
+#
 # 用法:
-#   bash scripts/setup.sh                              # 默认 SSH: git@github.com:kicool/electron-updater.git
-#   bash scripts/setup.sh git@github.com:OWNER/REPO.git
-#   私有库也可用 HTTPS+PAT: GITHUB_TOKEN=ghp_xxx bash scripts/setup.sh https://github.com/OWNER/REPO.git
+#   bash scripts/setup.sh                  # 默认跟随 release 分支
+#   bash scripts/setup.sh <branch>         # 指定要跟随的分支
+#
+# 前提：本目录已经是从远端 clone 下来的仓库（用户拿到的是 release 分支）。
+# 与旧版的区别：旧版在这里 clone 一份到 local/app-checkout，导致用户侧两份目录。
 set -eo pipefail
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
-REPO_URL="${1:-git@github.com:kicool/electron-updater.git}"
-BRANCH="${2:-release}"
-LOCAL="$HERE/local/app-checkout"
-TOKEN="${GITHUB_TOKEN:-}"
+CFG="$HERE/src/application/config.json"
+BRANCH="${1:-release}"
 
-# 私有库：把 token 注入 https URL（仅 https 时生效）
-if [ -n "$TOKEN" ] && [[ "$REPO_URL" == https://* ]]; then
-  CLONE_URL="https://${TOKEN}@${REPO_URL#https://}"
-else
-  CLONE_URL="$REPO_URL"
-fi
-
-echo "== 1) 只 clone 远程 $BRANCH 分支（单分支，不含 master）=="
-rm -rf "$LOCAL" "${LOCAL}.release"   # 清掉旧 clone 及可能的旧 worktree，保证干净起点
-if ! git clone -b "$BRANCH" --single-branch "$CLONE_URL" "$LOCAL"; then
-  echo "❌ clone $BRANCH 失败：远端大概率还没有 $BRANCH 分支。"
-  echo "   请先在 GitHub 上创建并推送 $BRANCH 分支（用 scripts/publish.sh 或网页发版）。"
+if [ ! -d "$HERE/.git" ]; then
+  echo "❌ $HERE 不是 git 仓库。1 份化后不再单独 clone 加载树，请先 clone 仓库本身："
+  echo "   git clone -b $BRANCH <仓库URL> <目录> && cd <目录> && bash scripts/setup.sh"
   exit 1
 fi
-cd "$LOCAL"
-git config user.email "${GIT_USER_EMAIL:-user@local}"
-git config user.name  "${GIT_USER_NAME:-user}"
 
+echo "== 1) 本目录即加载树（不再有第二份）=="
+echo "   目录 $(git -C "$HERE" rev-parse --show-toplevel)"
+echo "   分支 $(git -C "$HERE" rev-parse --abbrev-ref HEAD) @ $(git -C "$HERE" rev-parse --short HEAD)"
+
+echo ""
 echo "== 2) 写 src/application/config.json（只放本机差异，其余契约取自 registry.json）=="
-cat > "$HERE/src/application/config.json" <<JSON
+cat > "$CFG" <<JSON
 {
-  "repoPath": "$LOCAL",
+  "repoPath": "$HERE",
   "branch": "$BRANCH",
   "remote": "origin",
   "useWorktree": false
 }
 JSON
+cat "$CFG"
 
+echo ""
 echo "== 3) 对齐 Electron 二进制缓存（避免同一份 130MB 被重复下载）=="
 bash "$HERE/scripts/electron-once.sh" || true
-echo ""
 
 echo ""
-printf '✅ 已 clone %s 的 %s 分支到 %s，config.json 已写好（useWorktree=false）。\n' "$REPO_URL" "$BRANCH" "$LOCAL"
-echo "   启动:                   cd $HERE && npm install && npm start"
-echo "   发版(A 角色, 独立操作):  bash scripts/publish.sh $REPO_URL"
-echo ""
-echo "   想本地开发? 与本升级方案无关，开发者自行:"
-echo "     cd $LOCAL"
-echo "     git fetch origin master:master          # 单分支 clone 默认不含 master，先取回"
-echo "     git worktree add ../dev-master master    # 拉出开发用 master 工作树"
-echo "   （updater.js 永远只认 release 工作树，master 工作树与它互不干扰）"
+printf '✅ 配置完成：应用将加载本目录自身（%s）\n' "$HERE"
+echo "   ⚠️ 本目录不能再放未提交的改动：更新用 reset --hard，会抹掉 tracked 改动。"
+echo "      （启动时主进程会做 dirty check：有改动则拒绝自动拉取并提示，不会静默毁掉）"
+echo "   启动: cd $HERE && npm install && npm start"

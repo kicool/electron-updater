@@ -23,6 +23,7 @@ function statusText(s) {
   if (s.offline) return '⚠️ 离线/无法连接远程，使用本地当前版本';
   if (s.skipped) return '本地验收模式（skipUpdate 开：不访问远程，只看本地代码）';
   if (s.updated) return s.needsRestart ? '✅ 已拉取更新，需重启应用生效' : '✅ 已拉取更新（渲染层，无需重启）';
+  if (s.dirty) return '⛔ 本地有 ' + s.dirtyCount + ' 个未提交改动，已跳过自动更新（reset --hard 会抹掉它们）';
   if (s.behind) return '🔔 有可用更新，点击「更新」拉取';
   return '✓ 已是最新（' + ((env && env.branch) || 'release') + '）';
 }
@@ -44,8 +45,9 @@ function render(s) {
   $('status').textContent = statusText(s);
   $('feature').textContent = window.FEATURE_VERSION; // 关键：反映所载入代码里的标记
   // 仅提示模式且落后时，展示「更新」按钮；其余情况隐藏
-  $('apply').style.display = (!autoPull && s && s.behind) ? 'inline-block' : 'none';
-  if (!autoPull && s && s.behind) $('status').textContent = '🔔 有可用更新，点「更新」手动拉取';
+  // （dirty 时不给按钮：拉了会抹掉用户改动，点了也没用）
+  $('apply').style.display = (!autoPull && s && s.behind && !s.dirty) ? 'inline-block' : 'none';
+  if (!autoPull && s && s.behind && !s.dirty) $('status').textContent = '🔔 有可用更新，点「更新」手动拉取';
 }
 
 if (bridge && bridge.onStatus) {
