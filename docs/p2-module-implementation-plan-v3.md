@@ -365,6 +365,17 @@ git subtree pull --prefix=update-kit <kit 仓库 URL> main --squash
 
 ## 8. 实施阶段与验收
 
+### 验收流程
+
+```
+master 分支开发 → 自动化测试通过 → 通知用户验收 → 用户验收通过 → merge 到 release
+```
+
+**原则**：
+- 每个验收点完成后立即通知用户验收
+- 验收通过后再 merge 到 release
+- 不要积攒所有任务完成后再验收
+
 ### P2.0 修缺陷（✅ 进行中）
 
 | 步骤 | 内容 | 验收 | 状态 |
@@ -372,27 +383,28 @@ git subtree pull --prefix=update-kit <kit 仓库 URL> main --squash
 | 0.1 | D1：npm ci 移到 pull 之后 | 失败注入用例通过 | ✅ 完成 |
 | 0.2 | D2/D4：aheadBehind，ahead/diverged 拒绝 apply | 临时仓库用例通过 | ✅ 完成 |
 | 0.3 | D3：require 全部移到文件顶部 | grep 检查通过 | ✅ 完成 |
-| 0.4 | 发版 + V3 用户目录验收 | 5 个现有测试全绿 | ⬜ 待做 |
+| 0.4 | master 分支开发验收 | 用户验证 D1-D3 修复 | ⬜ 待验收 |
+| 0.5 | merge 到 release + V3 用户目录验收 | 5 个现有测试全绿 | ⬜ 待做 |
 
 ### P2.1 契约与 host 拆分（仍在本仓库内）
 
-| 步骤 | 内容 | 验收 |
-|---|---|---|
-| 1.1 | 新增 `defaults.json`、`contract-loader.js`（三层合并） | `core-test` 全绿 |
-| 1.2 | 契约迁到项目根，bridgeApi 结构化，contractVersion → 1.2.0 | `contract-check` 全绿 |
-| 1.3 | `gen-preload` + 生成物比对；替换手写 preload | `contract-check` / `smoke` 全绿 |
-| 1.4 | 拆出 state-store / local-config / scheduler / ipc-bridge | 每步全绿 |
-| 1.5 | main-host 编排 + check/apply 拆分 + 4.4 状态机 + restartMode | `main-host.js` < 200 行 |
-| 1.6 | `src/application/main.js` 改为按 4.1 接入 | `smoke` 全绿 |
+| 步骤 | 内容 | 验收 | 状态 |
+|---|---|---|---|
+| 1.1 | 新增 `defaults.json`、`contract-loader.js`（三层合并） | `core-test` 全绿 + 用户验收 | ⬜ 待做 |
+| 1.2 | 契约迁到项目根，bridgeApi 结构化，contractVersion → 1.2.0 | `contract-check` 全绿 + 用户验收 | ⬜ 待做 |
+| 1.3 | `gen-preload` + 生成物比对；替换手写 preload | `contract-check` / `smoke` 全绿 + 用户验收 | ⬜ 待做 |
+| 1.4 | 拆出 state-store / local-config / scheduler / ipc-bridge | 每步全绿 + 用户验收 | ⬜ 待做 |
+| 1.5 | main-host 编排 + check/apply 拆分 + 4.4 状态机 + restartMode | `main-host.js` < 200 行 + 用户验收 | ⬜ 待做 |
+| 1.6 | `src/application/main.js` 改为按 4.1 接入 | `smoke` 全绿 + 用户验收 | ⬜ 待做 |
 
 ### P2.2 独立化
 
-| 步骤 | 内容 | 验收 |
-|---|---|---|
-| 2.1 | 测试拆分到 `update-kit/test/`，新增集成测试和边界检查 | `run-all.js` 全绿 |
-| 2.2 | `subtree split` 建立 kit 仓库，本仓库改为 subtree 引入 | 所有测试全绿 |
-| 2.3 | `examples/minimal/` | `npm start` 成功 |
-| 2.4 | README + 分类决策树 + 状态机 + 重启方式 | 另一名成员仅按文档完成接入 |
+| 步骤 | 内容 | 验收 | 状态 |
+|---|---|---|---|
+| 2.1 | 测试拆分到 `update-kit/test/`，新增集成测试和边界检查 | `run-all.js` 全绿 + 用户验收 | ⬜ 待做 |
+| 2.2 | `subtree split` 建立 kit 仓库，本仓库改为 subtree 引入 | 所有测试全绿 + 用户验收 | ⬜ 待做 |
+| 2.3 | `examples/minimal/` | 用户按 README 接入并 `npm start` 成功 | ⬜ 待做 |
+| 2.4 | README + 分类决策树 + 状态机 + 重启方式 | 用户审查文档 | ⬜ 待做 |
 
 ---
 
