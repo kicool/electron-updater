@@ -12,3 +12,6 @@ src/application/config.json
 .DS_Store
 
 .workbuddy/
+
+# 本地工具/IDE 的缓存目录（不是项目文件，别让它污染覆盖率检查）
+.ua/

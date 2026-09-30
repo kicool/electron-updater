@@ -93,12 +93,10 @@ async function getVersion({ cwd }) {
   return runGit(['describe', '--tags', '--always'], cwd).catch(() => 'unknown');
 }
 
-// 判定改动是否「只动渲染层」：仅 app/ 下文件变化 → 无重启热更；否则需重启
-function onlyRendererChanges(files, rendererPrefix = 'app/') {
-  if (!files.length) return true;
-  return files.every((f) => f.startsWith(rendererPrefix));
-}
-
+// 注：「改动是否只动渲染层」的判定已从本文件移除，改由
+//   src/update-kit/core/classifier.js 的 classify() 基于 updateUnits 白名单判定。
+// 旧实现 onlyRendererChanges() 是路径前缀启发式，会误报（改 docs 也判「需重启」，已实证），
+// 已删除以免留下第二套判据。
 module.exports = {
-  runGit, resolveAppTree, fetch, compare, diffFiles, pull, getVersion, onlyRendererChanges, isDirty,
+  runGit, resolveAppTree, fetch, compare, diffFiles, pull, getVersion, isDirty,
 };

@@ -55,7 +55,7 @@ kicool/electron-updater  （唯一源，GitHub）
 ```
 app.whenReady()
   └─ appRoot = resolveAppTree(CONFIG)   // useWorktree=false → 直接 path.resolve(repoPath)
-  └─ lastStatus = checkUpdate(CONFIG.autoPull)   // 启动即按 autoPull 决定是否拉取
+  └─ lastStatus = checkUpdate(pull = shouldApply(POLICY))  // 启动行为由 updatePolicy.onStartup + apply 决定
   └─ createWindow()
         └─ loadFile(appRoot + CONFIG.appEntry)    // src/application/renderer/index.html
         └─ did-finish-load → 推 'update:status' 与 'update:config' 给渲染层
@@ -63,18 +63,18 @@ app.whenReady()
 
 ### 检查更新（main.js IPC）
 ```js
-// autoPull=true：落后则直接拉取，仅渲染层改动时自动 reload（无重启）
+// apply=auto：落后则直接拉取，仅渲染层改动时自动 reload（无重启）
 ipcMain.handle('check-update', async () => {
-  const s = await checkUpdate(CONFIG.autoPull);
+  const s = await checkUpdate({ pull: shouldApply(POLICY, {}) });
   lastStatus = s;
-  if (CONFIG.autoPull && s.ok && s.updated && s.onlyRenderer && win) win.webContents.reload();
+  applyIfPossible(s);   // apply=notify 直接返回；hot 才 reload，restart/reinstall 只提示不擅自打断
   return s;
 });
-// 手动触发实际拉取（notify-only 模式「更新」按钮调用）
+// 手动触发实际拉取（notify 模式「更新」按钮调用）
 ipcMain.handle('apply-update', async () => {
-  const s = await checkUpdate(true);
+  const s = await checkUpdate({ pull: true, mode: 'manual' });
   lastStatus = s;
-  if (s.ok && s.updated && s.onlyRenderer && win) win.webContents.reload();
+  applyIfPossible(s);   // 同上：hot → reload；restart/reinstall → 提示重启或重装
   return s;
 });
 ```
@@ -99,13 +99,18 @@ const onlyRenderer = updater.onlyRendererChanges(files, rendererPrefix);
 
 ---
 
-## 四、自动拉取 vs 仅提示（`autoPull`）
+## 四、自动生效 vs 仅提示（`updatePolicy.apply`）
 
-写在 `src/application/config.json`（由 `setup.sh` 生成，已被 .gitignore）：
+默认在 `registry.json`（`updatePolicy.apply`），本机差异写在 `src/application/config.json`：
 
-- `autoPull: true`（默认）：点「检查更新」落后于远程则**自动 pull**，渲染层改动即时刷新。
-- `autoPull: false`（仅提示）：检查只 `fetch` 比对、不拉取；渲染层收到 `behind` 状态时显示「更新」按钮，
+- `apply: auto`（默认）：点「检查更新」落后于远程则**自动 pull**，渲染层改动即时刷新。
+- `apply: notify`（仅提示）：检查只 `fetch` 比对、不拉取；渲染层收到 `behind` 状态时显示「更新」按钮，
   用户点按才调用 `apply-update` 真正 pull。启动时也按此开关决定是否自更新。
+
+> 旧字段 `autoPull`（布尔）已于 2026-09-30 废弃：它只影响界面显示、不影响行为，
+> 会出现「抬头写仅提示、实际自动拉取」的假象，语义统一到 `apply`。
+> 仍写着的旧 `config.json` 会在 `registry.js` 里被迁移：`autoPull:false` 且未显式设 `apply` → 视为 `notify`，
+> 以免删字段把用户从「只提示」静默改成「自动生效」。
 
 ---
 
@@ -132,7 +137,7 @@ const onlyRenderer = updater.onlyRendererChanges(files, rendererPrefix);
 | 用户 clone 策略 | — | **只 clone `release` 单分支**，直接加载 |
 | 开发态 | — | **解耦**：开发者 `git worktree` 拉 master，updater 不感知 |
 | 脚本 | setup / seed / publish / selftest | setup / publish / selftest（**无 seed**：仓库已是完整应用，无需引导播种） |
-| 拉取策略 | 固定自动 | `autoPull` 可切换「自动 / 仅提示」 |
+| 拉取策略 | 固定自动 | `updatePolicy.apply` 可切换「自动生效 / 仅提示」（旧字段 `autoPull` 已废弃） |
 | 目录 | 扁平（main.js/app/...） | 规范分层：`docs/` + `src/application/` + `src/tools/` |
 
 ---

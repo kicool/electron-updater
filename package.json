@@ -10,7 +10,11 @@
     "publish": "bash scripts/publish.sh",
     "verify": "bash scripts/verify.sh",
     "electron:cache": "bash scripts/electron-once.sh",
-    "selftest": "node src/tools/real-remote-check.js"
+    "selftest": "node src/tools/real-remote-check.js",
+    "contract-check": "node src/tools/contract-check.js",
+    "core-test": "node src/tools/core-selftest.js",
+    "smoke": "node src/tools/main-smoke.js",
+    "matrix-test": "node src/tools/policy-matrix.js"
   },
   "devDependencies": {
     "electron": "^44.4.5"

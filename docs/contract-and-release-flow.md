@@ -39,7 +39,7 @@
 | 层 | 文件 | 是否进 git | 内容 |
 |---|---|---|---|
 | 静态契约 | `src/application/registry.json` | ✅ 进 | 路径、`bridgeApi` 名单、开关默认值 |
-| 本机差异 | `src/application/config.json` | ❌ gitignore | `repoPath` 绝对路径、本机 `branch` / `autoPull` 覆盖 |
+| 本机差异 | `src/application/config.json` | ❌ gitignore | `repoPath` 绝对路径、本机 `branch` / `updatePolicy` 覆盖 |
 | 解析器 | `src/application/registry.js` | ✅ 进 | 合并两者、推导前缀、导出绝对路径、内置校验 |
 
 **设计原则**：凡是「与机器无关」的，一律进 `registry.json`；凡是因为装在不同目录而必须不同的，
@@ -53,7 +53,7 @@
   "branch": "release",
   "useWorktree": false,
   "autoRestart": false,
-  "autoPull": true,
+  "skipUpdate": false,
   "paths": {
     "repoPath": "..",
     "preload": "preload.js",
@@ -246,7 +246,7 @@ git merge-base --is-ancestor origin/release master
 | T2 | `npm run selftest` | 已过 |
 | T3 | **渲染层无重启热更**：改 renderer → 界面自动刷新 | **未验证**（方案核心卖点，需一次纯渲染层改动 + 真实 push） |
 | T4 | 壳改动 → 提示需重启 → `relaunch()` | 环境已就绪：用户树已回退到 `103e1b2`，node 侧预测 `onlyRendererChanges=false` → 应提示重启；**待用户跑 `npm start` 确认** |
-| T5 | `autoPull=false` 仅提示 + 「更新」按钮 | 未验证 |
+| T5 | `apply=notify` 仅提示 + 「更新」按钮（旧字段 `autoPull` 已废弃并入 `apply`） | 未验证 |
 | T6 | 离线降级（远端不可达） | 未验证 |
 | T7 | 全新安装：`setup.sh` → `npm start` | 未验证 |
 | T8 | Electron 二进制缓存对齐（`electron-once.sh`） | **已过**：官方 / npmmirror 两个真实 URL 全部命中，硬链接共享 inode，占用恒 592M |
