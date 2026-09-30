@@ -52,7 +52,7 @@
     {
       "name": "docs",
       "class": "none",
-      "paths": ["docs/", "README.md"],
+      "paths": ["docs/", "README.md", "todo.md"],
       "action": "none"
     },
     {
