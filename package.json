@@ -8,9 +8,14 @@
     "start": "electron .",
     "setup": "bash scripts/setup.sh",
     "publish": "bash scripts/publish.sh",
-    "selftest": "node tools/real-remote-check.js"
+    "verify": "bash scripts/verify.sh",
+    "electron:cache": "bash scripts/electron-once.sh",
+    "selftest": "node src/tools/real-remote-check.js"
   },
   "devDependencies": {
     "electron": "^44.4.5"
+  },
+  "engines": {
+    "node": ">=22.12.0"
   }
 }

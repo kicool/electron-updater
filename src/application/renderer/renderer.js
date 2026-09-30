@@ -11,15 +11,31 @@ const $ = (id) => document.getElementById(id);
 
 // autoPull=false（仅提示模式）时，落后才显示「更新」按钮让用户手动拉取
 let autoPull = true;
-if (bridge && bridge.onConfig) bridge.onConfig((c) => { autoPull = !!(c && c.autoPull); });
+let env = null; // 加载环境：哪棵树 / 根路径 / 相对根入口 —— 验收时第一眼看这个
+if (bridge && bridge.onConfig) bridge.onConfig((c) => {
+  autoPull = !!(c && c.autoPull);
+  if (c && c.env) { env = c.env; renderEnv(); }
+});
 
 // 注意：loadFile 加载的页面没有 Node，但通过 preload 的 contextBridge 拿到 api。
 function statusText(s) {
   if (!s) return '初始化…';
   if (s.offline) return '⚠️ 离线/无法连接远程，使用本地当前版本';
+  if (s.skipped) return '本地验收模式（skipUpdate 开：不访问远程，只看本地代码）';
   if (s.updated) return s.needsRestart ? '✅ 已拉取更新，需重启应用生效' : '✅ 已拉取更新（渲染层，无需重启）';
   if (s.behind) return '🔔 有可用更新，点击「更新」拉取';
-  return '✓ 已是最新（release）';
+  return '✓ 已是最新（' + ((env && env.branch) || 'release') + '）';
+}
+
+// 渲染「加载环境」抬头：验收时先确认这里显示的树和路径，再看功能效果
+function renderEnv() {
+  if (!env) return;
+  $('env-tree').textContent = env.tree;
+  $('env-root').textContent = env.root;
+  $('env-entry').textContent = env.entry;
+  $('env-preload').textContent = env.preload;
+  $('env-ref').textContent = env.branch + ' @ ' + env.head + (env.ref === env.branch ? '' : '（' + env.ref + '）');
+  $('env-autopull').textContent = autoPull ? '开（自动拉取）' : '关（仅提示）';
 }
 
 function render(s) {

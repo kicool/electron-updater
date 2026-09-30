@@ -14,9 +14,25 @@
     button { font: inherit; padding: 9px 16px; border: 0; border-radius: 8px; background: #2d6cdf; color: #fff; cursor: pointer; }
     button:active { transform: translateY(1px); }
     .status { font-weight: 600; }
+    .env { background: #eef4ff; border: 1px solid #cfe0fb; border-radius: 10px; padding: 12px 16px; margin-bottom: 16px; }
+    .env-title { font-size: 12px; color: #5b7bb5; letter-spacing: 1px; margin-bottom: 6px; }
+    .env-row { display: flex; gap: 10px; padding: 2px 0; font-size: 12px; }
+    .env-k { color: #5b7bb5; min-width: 118px; flex: none; }
+    .env-v { color: #1f3f78; font-weight: 600; word-break: break-all; }
+    .env-v.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 500; }
   </style>
 </head>
 <body>
+  <div class="env">
+    <div class="env-title">加载环境（验收第一判据：先确认验的是哪棵树）</div>
+    <div class="env-row"><span class="env-k">树</span><span class="env-v" id="env-tree">…</span></div>
+    <div class="env-row"><span class="env-k">根目录（绝对）</span><span class="env-v mono" id="env-root">…</span></div>
+    <div class="env-row"><span class="env-k">入口（相对根）</span><span class="env-v mono" id="env-entry">…</span></div>
+    <div class="env-row"><span class="env-k">preload（相对根）</span><span class="env-v mono" id="env-preload">…</span></div>
+    <div class="env-row"><span class="env-k">比对分支 / HEAD</span><span class="env-v mono" id="env-ref">…</span></div>
+    <div class="env-row"><span class="env-k">autoPull</span><span class="env-v" id="env-autopull">…</span></div>
+  </div>
+
   <h1>learning 桌面端</h1>
   <div class="sub">基于 git-pull 的更新原型 · 渲染层免重启热更</div>
 

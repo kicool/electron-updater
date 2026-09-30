@@ -1,0 +1,17 @@
+{
+  "remote": "origin",
+  "branch": "release",
+  "treeLabel": "",
+  "useWorktree": false,
+  "autoRestart": false,
+  "autoPull": true,
+  "skipUpdate": false,
+  "paths": {
+    "repoPath": "../../local/app-checkout",
+    "preload": "preload.js",
+    "appEntry": "src/application/renderer/index.html",
+    "rendererDir": "src/application/renderer",
+    "rendererEntry": "src/application/renderer/renderer.js"
+  },
+  "bridgeApi": ["checkUpdate", "applyUpdate", "relaunch", "onStatus", "onConfig"]
+}

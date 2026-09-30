@@ -25,8 +25,11 @@ git config user.email "${GIT_USER_EMAIL:-a@local}"
 git config user.name  "${GIT_USER_NAME:-A 角色}"
 git checkout -B "$BRANCH" "origin/$BRANCH"
 
+# renderer 入口路径不写死，向 registry.json 问（契约唯一事实源）
+RENDERER_ENTRY="$(node -e "console.log(require('$HERE/src/application/registry.js').rendererEntry)")"
+
 echo "== 把功能版本标记 V1→V2（真实场景是改业务代码） =="
-node -e "const fs=require('fs');const p='src/application/renderer/renderer.js';let s=fs.readFileSync(p,'utf8');s=s.replace(/FEATURE_VERSION = \"V\\d+\"/,'FEATURE_VERSION = \"V2\"');fs.writeFileSync(p,s)"
+node -e "const fs=require('fs');const p='$RENDERER_ENTRY';let s=fs.readFileSync(p,'utf8');s=s.replace(/FEATURE_VERSION = \"V\\d+\"/,'FEATURE_VERSION = \"V2\"');fs.writeFileSync(p,s)"
 
 git add -A
 git commit -q -m "release: feature V2（模拟 A 角色发布）"

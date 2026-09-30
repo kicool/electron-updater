@@ -32,18 +32,19 @@ cd "$LOCAL"
 git config user.email "${GIT_USER_EMAIL:-user@local}"
 git config user.name  "${GIT_USER_NAME:-user}"
 
-echo "== 2) 写 src/application/config.json（useWorktree=false，直接加载 release 工作树）=="
+echo "== 2) 写 src/application/config.json（只放本机差异，其余契约取自 registry.json）=="
 cat > "$HERE/src/application/config.json" <<JSON
 {
   "repoPath": "$LOCAL",
   "branch": "$BRANCH",
   "remote": "origin",
-  "appEntry": "src/application/renderer/index.html",
-  "useWorktree": false,
-  "autoRestart": false,
-  "autoPull": true
+  "useWorktree": false
 }
 JSON
+
+echo "== 3) 对齐 Electron 二进制缓存（避免同一份 130MB 被重复下载）=="
+bash "$HERE/scripts/electron-once.sh" || true
+echo ""
 
 echo ""
 printf '✅ 已 clone %s 的 %s 分支到 %s，config.json 已写好（useWorktree=false）。\n' "$REPO_URL" "$BRANCH" "$LOCAL"

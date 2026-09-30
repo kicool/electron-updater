@@ -7,7 +7,7 @@
 
 | 依赖 | 版本 / 说明 |
 |---|---|
-| Node.js | ≥ 18（本机用 22.x 验证） |
+| Node.js | **≥ 22.12.0**（硬性：electron@44 的 postinstall 在 Node 18 上会因 `ERR_REQUIRE_ESM` 失败，见第 7 节） |
 | Git | 任意较新版本 |
 | GitHub 访问 | 公开库可直接 clone；私有库需 SSH key 或 PAT（见 README「前置：GitHub 认证」） |
 | 网络 | 首次 `npm install` 要下载 Electron 运行时（~100MB，按平台+架构缓存） |
@@ -26,7 +26,10 @@
 
 ## 3. 安装依赖
 
+**务必先确认 Node 版本**（仓库根目录有 `.nvmrc`，内容 `22.22.2`）：
+
 ```bash
+node -v                 # 必须 ≥ 22.12.0；低于此版本请 nvm use（或切到 22.x）
 npm install
 ```
 会安装 `devDependencies.electron`（本仓库锁定 `^44.4.5`）。
@@ -73,5 +76,23 @@ npm start          # 等价于 `electron .`，Electron 读取 package.json 的 m
 ## 7. 常见问题
 
 - **`Cannot find module`**：`package.json` 的 `main` 字段必须指向 `src/application/main.js`。若从旧结构迁移，重跑 `bash scripts/setup.sh` 会重建 `config.json` 与目录。
+- **Node 版本过低导致 `ERR_REQUIRE_ESM`**：现象是 `install.js` 里 `require('@electron/get')` 报错、
+  随后 `Electron failed to install correctly`。根因是 electron@44 要求 Node ≥ 22.12，而你用的是 18.x。
+  `package.json` 已加 `engines` 约束 + `.nvmrc`，请切到 Node 22 后重来：
+  ```bash
+  nvm use                       # 读取 .nvmrc
+  rm -rf node_modules/electron node_modules/@electron
+  npm install
+  ```
+  （已装 node_modules 的情况下补跑一次二进制：`node node_modules/electron/install.js`）
 - **启动后界面停在「初始化…」**：多为首次 `fetch GitHub` 的网络延迟；确认 SSH 已配好（`ssh -T git@github.com`）。
 - **改了主进程代码不生效**：主进程改动需**重启应用**（`npm start` 重开窗口），不是无重启热更——只有 `src/application/renderer/` 下的改动才热更。
+- **`TypeError: Cannot read properties of undefined (reading 'whenReady')`**：环境里存在
+  `ELECTRON_RUN_AS_NODE=1`（某些工具链会注入），它会让 Electron 二进制退化成普通 Node 去跑 `main.js`。
+  解决：`unset ELECTRON_RUN_AS_NODE` 后再 `npm start`。
+- **`sandbox initialization failed: Operation not permitted`**：在受限执行环境（CI / 被沙箱包裹的进程）里启动会失败，
+  临时解法加 `--no-sandbox`：`./node_modules/electron/dist/Electron.app/Contents/MacOS/Electron . --no-sandbox`。
+  （仅本地排障用，正式运行不要加）
+- **想不建 `local/app-checkout` 直接跑**：仓库本身就是应用源码，把 `src/application/config.json` 的
+  `repoPath` 指向仓库根目录即可。⚠️ 但 pull 是 `reset --hard`，务必先提交或保持 `autoPull: false`，
+  否则未提交的改动会被远程版本覆盖。

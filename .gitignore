@@ -10,3 +10,5 @@ src/application/config.json
 # 日志与系统文件
 *.log
 .DS_Store
+
+.workbuddy/
