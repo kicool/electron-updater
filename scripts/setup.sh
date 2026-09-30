@@ -42,6 +42,10 @@ cat > "$HERE/src/application/config.json" <<JSON
 }
 JSON
 
+echo "== 3) 对齐 Electron 二进制缓存（避免同一份 130MB 被重复下载）=="
+bash "$HERE/scripts/electron-once.sh" || true
+echo ""
+
 echo ""
 printf '✅ 已 clone %s 的 %s 分支到 %s，config.json 已写好（useWorktree=false）。\n' "$REPO_URL" "$BRANCH" "$LOCAL"
 echo "   启动:                   cd $HERE && npm install && npm start"

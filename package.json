@@ -8,6 +8,8 @@
     "start": "electron .",
     "setup": "bash scripts/setup.sh",
     "publish": "bash scripts/publish.sh",
+    "verify": "bash scripts/verify.sh",
+    "electron:cache": "bash scripts/electron-once.sh",
     "selftest": "node src/tools/real-remote-check.js"
   },
   "devDependencies": {

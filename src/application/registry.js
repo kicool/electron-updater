@@ -53,7 +53,9 @@ module.exports = {
   remote: pick('remote', registry.remote),
   branch: pick('branch', registry.branch),
   useWorktree: pick('useWorktree', registry.useWorktree),
+  treeLabel: pick('treeLabel', registry.treeLabel),
   autoPull: pick('autoPull', registry.autoPull),
+  skipUpdate: pick('skipUpdate', registry.skipUpdate),
   autoRestart: pick('autoRestart', registry.autoRestart),
 
   // 根目录
@@ -74,7 +76,8 @@ module.exports = {
 
   describe() {
     return [
-      `remote=${this.remote} branch=${this.branch} autoPull=${this.autoPull}`,
+      `remote=${this.remote} branch=${this.branch} autoPull=${this.autoPull} skipUpdate=${this.skipUpdate}`,
+      `treeLabel=${this.treeLabel || '(未设置 → 界面按目录名推断)'}`,
       `repoPath=${this.repoPath}`,
       `appEntry=${this.appEntry}`,
       `rendererPrefix=${this.rendererPrefix}`,

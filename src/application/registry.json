@@ -1,9 +1,11 @@
 {
   "remote": "origin",
   "branch": "release",
+  "treeLabel": "",
   "useWorktree": false,
   "autoRestart": false,
   "autoPull": true,
+  "skipUpdate": false,
   "paths": {
     "repoPath": "../../local/app-checkout",
     "preload": "preload.js",
