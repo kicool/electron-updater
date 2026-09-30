@@ -74,6 +74,17 @@ async function checkUpdate(autoPull) {
 
   if (!autoPull) return { ok: true, updated: false, behind: true, version, offline: false };
 
+  // 1 份化后的硬保护：pull 作用于用户自己的工作目录，reset --hard 会抹掉未提交的改动。
+  // 有改动就拒绝自动拉取并显式回报，而不是默默毁掉用户的东西。
+  const dirty = await updater.isDirty({ cwd: appRoot });
+  if (dirty.dirty) {
+    console.log(`[main] 检测到 ${dirty.count} 个未提交改动，拒绝自动拉取：\n  ${dirty.files.join('\n  ')}`);
+    return {
+      ok: true, updated: false, behind: true, version, offline: false,
+      dirty: true, dirtyCount: dirty.count, dirtyFiles: dirty.files,
+    };
+  }
+
   const files = await updater.diffFiles(cmp.local, cmp.remote, { cwd: appRoot });
   await updater.pull({ remote: CONFIG.remote, branch: CONFIG.branch, cwd: appRoot });
   const onlyRenderer = updater.onlyRendererChanges(files, CONFIG.rendererPrefix);

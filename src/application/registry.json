@@ -7,7 +7,7 @@
   "autoPull": true,
   "skipUpdate": false,
   "paths": {
-    "repoPath": "../../local/app-checkout",
+    "repoPath": "..",
     "preload": "preload.js",
     "appEntry": "src/application/renderer/index.html",
     "rendererDir": "src/application/renderer",

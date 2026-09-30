@@ -77,6 +77,18 @@ async function pull({ remote, branch, cwd }) {
   await runGit(['reset', '--hard', `${remote}/${branch}`], cwd);
 }
 
+// 「1 份化」后的硬保护：pull 现在作用于用户自己的工作目录本身，
+// reset --hard 会抹掉未提交的 tracked 改动 —— 所以拉之前必须先查。
+// 只看 tracked（-uno）：untracked 文件不会被 reset --hard 删除，拦它属于过度保护
+// （用户自己的数据文件、日志放在仓库里不该让更新失败）。
+async function isDirty({ cwd }) {
+  const out = await runGit(['status', '--porcelain', '--untracked-files=no'], cwd)
+    .catch(() => null);
+  if (out === null) return { dirty: false, error: 'git status 执行失败' };
+  const files = out.split('\n').map((s) => s.trim()).filter(Boolean);
+  return { dirty: files.length > 0, count: files.length, files: files.slice(0, 8) };
+}
+
 async function getVersion({ cwd }) {
   return runGit(['describe', '--tags', '--always'], cwd).catch(() => 'unknown');
 }
@@ -88,5 +100,5 @@ function onlyRendererChanges(files, rendererPrefix = 'app/') {
 }
 
 module.exports = {
-  runGit, resolveAppTree, fetch, compare, diffFiles, pull, getVersion, onlyRendererChanges,
+  runGit, resolveAppTree, fetch, compare, diffFiles, pull, getVersion, onlyRendererChanges, isDirty,
 };
