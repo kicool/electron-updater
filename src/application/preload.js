@@ -14,6 +14,8 @@ const handlers = {
   relaunch: () => ipcRenderer.send('relaunch'),
   onStatus: (cb) => ipcRenderer.on('update:status', (_e, s) => cb(s)),
   onConfig: (cb) => ipcRenderer.on('update:config', (_e, c) => cb(c)),
+  // 界面改自动更新设置：patch 是 updatePolicy 的局部片段（深合并），写本机 config.json
+  setUpdatePolicy: (patch) => ipcRenderer.invoke('set-update-policy', patch),
 };
 
 const declared = contract.bridgeApi;

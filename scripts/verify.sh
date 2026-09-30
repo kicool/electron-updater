@@ -48,14 +48,17 @@ cleanup_worktrees() {
 }
 
 write_cfg() {
-  local file="$1" repo_path="$2" label="$3" branch="$4" autopull="$5" skipupdate="$6"
+  # 旧参数 autoPull 已废弃（2026-09-30）：语义并入 updatePolicy.apply（auto=自动生效 / notify=只提示）
+  local file="$1" repo_path="$2" label="$3" branch="$4" apply="$5" skipupdate="$6"
   cat > "$file" <<JSON
 {
   "repoPath": "$repo_path",
   "treeLabel": "$label",
   "branch": "$branch",
-  "autoPull": $autopull,
-  "skipUpdate": $skipupdate
+  "skipUpdate": $skipupdate,
+  "updatePolicy": {
+    "apply": "$apply"
+  }
 }
 JSON
 }
@@ -65,12 +68,12 @@ case "$MODE" in
     echo "== V1 开发自验：加载主仓自身（master）=="
     echo "   （1 份化：主仓就是加载树，不再另开 worktree）"
     cleanup_worktrees
-    write_cfg "$HERE/src/application/config.json" "$HERE" "主仓 / V1 开发自验" master false true
+    write_cfg "$HERE/src/application/config.json" "$HERE" "主仓 / V1 开发自验" master notify true
     echo ""
     echo "判据：抬头 树=主仓 / V1 开发自验"
     echo "      根目录 $HERE"
     echo "      preload 应为 src/application/preload.js（树内，不再带 ../）"
-    echo "      autoPull=关、skipUpdate=开（不联网，只看本地代码）"
+    echo "      apply=notify（只提示）、skipUpdate=开（不联网，只看本地代码）"
     ;;
 
   user)
@@ -86,11 +89,11 @@ case "$MODE" in
       echo "   回退到 $AT（模拟用户停在旧版本）"
       git -C "$TARGET" reset --hard "$AT"
     fi
-    write_cfg "$TARGET/src/application/config.json" "$TARGET" "用户目录 / V3 用户态" release true false
+    write_cfg "$TARGET/src/application/config.json" "$TARGET" "用户目录 / V3 用户态" release auto false
     echo ""
     echo "判据：抬头 树=用户目录 / V3 用户态"
     echo "      根目录 $TARGET"
-    echo "      autoPull=开、skipUpdate=关（真实联网）"
+    echo "      apply=auto（自动生效）、skipUpdate=关（真实联网）"
     if [ -n "$AT" ]; then
       echo "      启动后应看到：自动 pull → 版本号变化 → （纯渲染层）无重启热更 / （壳改动）提示重启"
     else

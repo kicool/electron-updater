@@ -1,10 +1,11 @@
 {
+  "contractVersion": "1.1.0",
+  "contractMinSupported": "1.0.0",
   "remote": "origin",
   "branch": "release",
   "treeLabel": "",
   "useWorktree": false,
   "autoRestart": false,
-  "autoPull": true,
   "skipUpdate": false,
   "paths": {
     "repoPath": "..",
@@ -13,5 +14,84 @@
     "rendererDir": "src/application/renderer",
     "rendererEntry": "src/application/renderer/renderer.js"
   },
-  "bridgeApi": ["checkUpdate", "applyUpdate", "relaunch", "onStatus", "onConfig"]
+  "bridgeApi": ["checkUpdate", "applyUpdate", "relaunch", "onStatus", "onConfig", "setUpdatePolicy"],
+  "updateUnits": [
+    {
+      "name": "renderer",
+      "class": "hot",
+      "paths": ["src/application/renderer/"],
+      "action": "reload"
+    },
+    {
+      "name": "shell",
+      "class": "restart",
+      "paths": [
+        "src/application/main.js",
+        "src/application/preload.js",
+        "src/application/registry.js",
+        "src/application/registry.json",
+        "src/application/updater.js",
+        "src/update-kit/"
+      ],
+      "action": "relaunch"
+    },
+    {
+      "name": "deps",
+      "class": "restart",
+      "paths": ["package.json", "package-lock.json"],
+      "action": "npm-ci-then-relaunch",
+      "fallback": "reinstall"
+    },
+    {
+      "name": "runtime",
+      "class": "reinstall",
+      "paths": ["node_modules/"],
+      "action": "prompt-reinstall",
+      "unreachableByGit": true
+    },
+    {
+      "name": "docs",
+      "class": "none",
+      "paths": ["docs/", "README.md"],
+      "action": "none"
+    },
+    {
+      "name": "scripts",
+      "class": "none",
+      "paths": ["scripts/"],
+      "action": "none"
+    },
+    {
+      "name": "tools",
+      "class": "none",
+      "paths": ["src/tools/"],
+      "action": "none"
+    },
+    {
+      "name": "meta",
+      "class": "none",
+      "paths": [".gitignore", ".nvmrc"],
+      "action": "none"
+    }
+  ],
+  "updatePolicy": {
+    "enabled": true,
+    "onStartup": "checkAndApply",
+    "schedule": {
+      "mode": "interval",
+      "intervalMinutes": 60,
+      "dailyAt": "09:00",
+      "jitterMinutes": 5
+    },
+    "quietHours": { "from": "23:00", "to": "07:00" },
+    "apply": "auto",
+    "constraints": {
+      "skipWhenDirty": true,
+      "skipWhenOfflineSilently": true,
+      "autoNpmCi": false,
+      "npmCiTimeoutMs": 300000,
+      "maxRetries": 3,
+      "backoffMinutes": [5, 15, 60]
+    }
+  }
 }

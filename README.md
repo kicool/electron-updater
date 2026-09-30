@@ -38,9 +38,9 @@
   再按 `git diff --name-only` 判定：
   - **改动全在 `src/application/renderer/`** → 仅渲染层 → `reload()` **无重启热更**；
   - **改动触及 `src/application/` 的壳或 `package.json`** → 提示**重启**生效。
-- 两种拉取策略由 `autoPull`（写在 `src/application/config.json`）控制：
-  - `autoPull: true`（默认）：检查到新版本**自动 pull**；
-  - `autoPull: false`（仅提示）：检查只比对、不拉取，界面出现「更新」按钮，**手动点按才 pull**。
+- 拉取与生效方式由 `updatePolicy.apply` 控制（默认在 `registry.json`，本机差异写在 `src/application/config.json`）：
+  - `apply: auto`（默认）：检查到新版本**自动 pull**，渲染层改动自动 reload（无重启）；
+  - `apply: notify`（仅提示）：检查只比对、不拉取，界面出现「更新」按钮，**手动点按才 pull**。
 
 ## 目录结构
 
@@ -120,8 +120,8 @@ npm install && npm start          # 装 electron 并启动
 
 ### 2. 接收更新（热更）
 开发者发版后，应用下次启动会自动 pull `release`；或在窗口点「检查更新」：
-- `autoPull: true` → 自动拉取，仅渲染层改动则**界面无重启刷新**；
-- `autoPull: false` → 仅提示「有可用更新」，点「更新」按钮手动拉取。
+- `apply: auto` → 自动拉取，仅渲染层改动则**界面无重启刷新**；
+- `apply: notify` → 仅提示「有可用更新」，点「更新」按钮手动拉取。
 主进程 / 依赖改动会提示重启，点确认即 `app.relaunch()`。
 
 ## 开发者流程（要发新版本）
@@ -179,7 +179,15 @@ git push git@github.com:kicool/electron-updater.git release --tags
 
 ## 验收：界面抬头先自证「加载的是哪棵树」
 
-代码同时存在于 master 工作树、release 工作树、用户检出三处，最容易犯的错是**验的不是你想验的那棵树**——
+界面按「先自证环境、再看更新方式、最后看能力边界」分成三块：
+
+| 分区 | 内容 | 回答什么问题 |
+|---|---|---|
+| 一、环境与状态 | 加载环境抬头 + 版本 / 功能标记 / 更新状态 / 更新类别 / 生效方式 | **我验的是哪棵树？现在什么状态？** |
+| 二、更新方式 | 自动更新设置（启用 / 开机 / 频率 / 生效方式）+ 「检查更新」「更新」按钮 | **什么时候触发、谁来触发**（自动与手动是同一件事的两种触发，放一起） |
+| 三、更新能力与范围 | `updateUnits` 白名单表 | **哪些路径能热更、哪些要重启、哪些得重装** |
+
+第一块尤其重要：代码同时存在于 master 工作树、release 工作树、用户检出三处，最容易犯的错是**验的不是你想验的那棵树**——
 效果看着对了，其实验的是另一份代码。窗口顶部的「加载环境」抬头就是为此存在：
 
 | 抬头字段 | 含义 |
@@ -189,7 +197,7 @@ git push git@github.com:kicool/electron-updater.git release --tags
 | 入口（相对根） | 渲染层入口相对该根的路径 |
 | preload（相对根） | 1 份化后应为 `src/application/preload.js`（**树内**）；若出现 `../` 说明壳与加载树不同源，**改动需重启生效** |
 | 比对分支 / HEAD | 跟哪个分支比对、本地 HEAD；`detached` 表示分离头 |
-| autoPull | 开（自动拉取）/ 关（仅提示） |
+| 更新生效方式 | `auto`（自动拉取并生效）/ `notify`（只提示，等我点） |
 
 两档验收用 `scripts/verify.sh` 切换（它负责写好 `config.json` 的 `treeLabel` / `repoPath`）：
 
@@ -203,7 +211,7 @@ npm run verify user --at <旧sha>      # 回退到旧版本，用于验「更新
 1 份化后**不再建 worktree、也没有 merge 档** —— V2 判据改在 `electron-updater-release` 里做：
 `git diff --stat FETCH_HEAD` 必须为空（见「开发者流程」）。
 
-V1 档 `autoPull=false` + `skipUpdate=true` 双保险：主仓是正在开发的树，
+V1 档 `apply=notify` + `skipUpdate=true` 双保险：主仓是正在开发的树，
 即使误触发也不会拉取、不会 `reset --hard`；万一真触发，dirty check 也会拦住。
 
 ## 换成其他仓库
@@ -226,10 +234,13 @@ bash scripts/publish.sh git@github.com:<你>/<repo>.git
 |---|---|---|
 | `appEntry` / `rendererDir` / `rendererEntry` | registry.json | main.js、publish.sh |
 | `preload` | registry.json | main.js 的 BrowserWindow |
-| `rendererPrefix`（热更判定前缀） | 由 rendererDir 推导 | main.js |
 | `window.api` 成员名单 | registry.json 的 `bridgeApi` | preload.js + renderer.js |
-| `remote` / `branch` / `autoPull` 默认值 | registry.json | main.js |
+| `remote` / `branch` / `updatePolicy` 默认值 | registry.json | main.js |
 | `repoPath`（本机绝对路径） | config.json（gitignore） | main.js |
+| **`updateUnits`**（路径 → 更新能力白名单） | registry.json，**本机不可覆盖** | `core/classifier.js` |
+| **`updatePolicy`**（时机策略，默认值） | registry.json | `core/policy.js` |
+| `updatePolicy`（本机选择：界面开关） | config.json（gitignore） | main.js |
+| **`contractVersion` / `contractMinSupported`** | registry.json | classifier 的兼容性判定 |
 
 **注意两个不同的根**：`preload` 相对壳目录（`src/application/`）解析；`appEntry`/`rendererDir` 相对代码树根（appRoot）解析。布局一致但语义不同。
 
@@ -242,6 +253,69 @@ bash scripts/publish.sh git@github.com:<你>/<repo>.git
 
 搬不动的两处：Electron 的 `package.json → main` 字段（在你任何 JS 执行前就被读取），
 以及注册表文件自身的路径。/bootstrap 必须从一个已知位置起步。
+
+## 更新策略：白名单 + 时机（契约驱动，不是路径猜测）
+
+> 完整设计方案见 **`docs/update-policy-and-module-design.md`**。
+
+### 范围：所有路径登记进 `updateUnits`，每条显式标注更新能力
+
+| class | 含义 | 默认动作 | 用户感受 |
+|---|---|---|---|
+| `hot` | reload 即可让新代码接管 | `reload` | 无感热更 |
+| `restart` | 需重启进程 | `relaunch`（deps 类可先 `npm ci`） | 弹确认 → 重启 |
+| `reinstall` | git 拉不到、或换不进运行态 | `prompt-reinstall` | 明确告知要重装 |
+| `none` | 与运行态无关 | `none` | 静默，不打扰 |
+| `unknown` | **未登记**（兜底） | 按 `restart` + `[warn]` 告警 | 保守且不静默 |
+
+匹配规则：路径以 `/` 结尾 = 目录前缀，否则 = 精确文件；**最长模式优先**；
+同一路径被两个单元声明 = 契约报错（不静默取第一个）；未登记 = `unknown`。
+
+**为什么不用「越出 renderer 前缀就算需重启」**：那是拿「文件在哪个目录」去猜「新旧代码会不会同时存在于运行态」，
+会误报也漏。实证：`1f4fdd0..547b7d4` 只改了两个 `docs/*.md`，旧判据弹「需重启应用生效」，
+新判据判 `none`。
+
+`hot` 的完整判据是「变更集全在 hot 单元内 **且 `bridgeApi` 未变**」；
+契约主版本跳跃（壳读不懂新契约、无法自举）直接判 `reinstall`。
+
+### 时机：`updatePolicy` 全可配，界面可改
+
+```jsonc
+"updatePolicy": {
+  "enabled": true,                 // 总开关：关 = 只有手动检查
+  "onStartup": "checkAndApply",    // off / check / checkAndApply
+  "schedule": { "mode": "interval", "intervalMinutes": 60, "dailyAt": "09:00", "jitterMinutes": 5 },
+  "quietHours": { "from": "23:00", "to": "07:00" },
+  "apply": "auto",                 // auto / notify（notify = 只提示，把打断权交还用户）
+  "constraints": { "skipWhenDirty": true, "maxRetries": 3, "backoffMinutes": [5, 15, 60] }
+}
+```
+
+pull 模式（不是服务端推送）下每个客户端都要自己轮询，所以有四个 push 模式没有的要点：
+
+- **检测 ≠ 拉取**：检测廉价、拉取昂贵且危险 → 可以频繁检测、谨慎拉取。
+- **jitter 抖动**：定点时间上加 ±N 分钟随机，否则几百个客户端同一秒打爆同一个 git 服务。
+- **免打扰时段** + **失败指数退避**（连续失败 → 5/15/60 分钟，达 `maxRetries` 本轮放弃）。
+- **dirty 优先**：任何自动拉取前先 `isDirty()`，有未提交改动就跳过（自动更新无人值守，比手动更危险）。
+
+界面改动只写本机 `config.json`（gitignore）——**不进 git，也不会让 `isDirty()` 为真**。
+`updateUnits` 是团队契约，界面不提供修改入口。
+
+运行时状态（上次/下次检测时间、连续失败次数）写 **`app.getPath('userData')`**，不写仓库：
+写仓库会被 `reset --hard` 覆盖，还会让 dirty check 永久为真 → 自动更新从此失效。
+
+### 体检脚本
+
+```bash
+npm run contract-check    # 结构自检 + 覆盖率 + bridgeApi 双向一致（退出码非 0 = 失败）
+npm run core-test         # classifier / policy 的 34 条 node 断言
+npm run smoke             # 主进程接线冒烟：用 stub 顶掉 electron 跑完 main.js 全链路
+npm run smoke -- --write-config   # 额外验「界面改设置 → 写 config.json」（跑完还原）
+```
+
+`contract-check` 三项：① schema / 路径 / 单元冲突 / hot 单元必须在 rendererDir 内；
+② 覆盖率（tracked + 未提交文件里有没有没登记的）；③ bridgeApi 声明与 preload 实现双向一致
+（正则解析源码，**不 require electron**，否则 CI 跑不了）。
 
 ## Electron 二进制：130MB 为什么会下第二次
 
